@@ -1,4 +1,4 @@
-from src.modules.health_module import HealthModule
+from src.utils.health import HealthModule
 
 
 class HealthService:

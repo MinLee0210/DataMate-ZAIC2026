@@ -69,6 +69,10 @@ def test_answers_with_resolved_time_and_entities(toy_split, tmp_path):
     prompt = llm.calls[0][0]
     assert '"tuan roi" -> 2026-10-19 .. 2026-10-25 (week)' in prompt
     assert "orders" in prompt and "thanh_tien_vnd" in prompt
+    # usage and timings for src/evaluate/metrics.py
+    assert len(trace["llm"]) == settings.k and trace["llm"][0]["completion_tokens"] == 20
+    assert {"prepare", "generate", "execute", "decide"} <= set(trace["timings"])
+    assert trace["ingest_s"] >= 0
 
 
 def test_entity_linking_reaches_the_prompt(toy_split, tmp_path):

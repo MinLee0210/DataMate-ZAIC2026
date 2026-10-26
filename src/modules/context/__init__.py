@@ -2,7 +2,6 @@ from src.modules.context.entities import (
     Entity,
     EntityMatch,
     build_entity_dict,
-    fold,
     link_entities,
     render_entity_matches,
 )
@@ -13,7 +12,6 @@ __all__ = [
     "EntityMatch",
     "build_entity_dict",
     "build_table_card",
-    "fold",
     "link_entities",
     "render_entity_matches",
     "render_schema_card",

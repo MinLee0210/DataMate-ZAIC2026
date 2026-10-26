@@ -5,7 +5,8 @@ Output conventions (verify against the official answer examples):
   (12.5 means 12.5%), the SQL is asked to multiply by 100.
 - date: 'yyyy-mm-dd', or 'yyyy-mm' when the query returns a month.
 - boolean: true / false.
-- list: values of the first column, in row order. table: rows as lists, in row order.
+- list: values of the first column, in row order.
+- table: {"columns": [...], "rows": [[...], ...]} (rulebook §9); column 1 is the object name.
 """
 
 import math
@@ -88,7 +89,10 @@ def format_result(answer_type: str, frame: pd.DataFrame) -> Any:
     if answer_type == "list":
         return [format_scalar(v) for v in frame.iloc[:, 0].tolist()]
     if answer_type == "table":
-        return [[format_scalar(v) for v in row] for row in frame.itertuples(index=False)]
+        return {
+            "columns": [str(c) for c in frame.columns],
+            "rows": [[format_scalar(v) for v in row] for row in frame.itertuples(index=False)],
+        }
     if frame.shape[0] != 1:
         raise FormatError(f"{answer_type} needs one row, got {frame.shape[0]}")
     value = frame.iat[0, 0]

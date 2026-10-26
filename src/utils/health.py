@@ -1,9 +1,7 @@
 from collections.abc import Callable
 
-from src.modules.base import BaseModules
 
-
-class HealthModule(BaseModules):
+class HealthModule:
     """Registry of health probes (datasources, LLM providers, external APIs, ...).
 
     A probe is a callable that raises if its target is unhealthy,
@@ -11,7 +9,6 @@ class HealthModule(BaseModules):
     """
 
     def __init__(self) -> None:
-        super().__init__()
         self.probes: dict[str, Callable[[], None]] = {}
 
     def register(self, name: str, probe: Callable[[], None]) -> None:

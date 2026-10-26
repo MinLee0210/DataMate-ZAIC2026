@@ -1,12 +1,15 @@
 """Where a split's files live. This is the only module that knows the dataset layout.
 
-Assumed layout (update here once the official data is downloaded):
+Official layout (train, public_test):
 
     <data_dir>/<split>/                     or <data_dir>/ itself when it holds questions directly
-    ├── questions.jsonl                     {"id", "business_id", "question", "as_of_date", ...}
-    ├── rulebook.md                         split-wide business rules (optional)
-    ├── calendar.(csv|xlsx)                 solar-lunar calendar (optional)
-    └── businesses/<business_id>/           README.md + one or more .csv / .xlsx / .sqlite
+    ├── questions.jsonl                     {"id", "business_id", "question", "as_of_date"}
+    ├── answers.jsonl                       train only: {"id", "type", "answer", "alias"}
+    ├── rulebook.md                         split-wide business rules
+    ├── calendar.csv                        date, weekday, lunar_day/month/year, lunar_leap, holiday
+    └── data/<business_id>/                 README.md + one or more .csv / .xlsx / .sqlite
+
+`businesses/` and `packages/` are also accepted for the business folders.
 """
 
 import json
@@ -76,16 +79,18 @@ def rulebook_file(root: Path) -> Path | None:
 
 
 def load_gold(root: Path) -> tuple[dict[str, dict], dict[str, dict]]:
-    """Train labels: {id: {"type", "answer"}} and the raw question records.
+    """Train labels: {id: {"type", "answer", "alias"}} and the raw question records.
 
     Labels are read from `answers.jsonl` when present, else from `type` / `answer` fields in the
-    questions file. Only train (and self-generated) splits have them.
+    questions file. Only train (and self-generated) splits have them. `alias` holds the other
+    accepted spellings (codes): a list for strings, one list per position for lists, one list per
+    row for tables.
     """
     questions = {q.id: q.model_dump(mode="json") for q in load_questions(root)}
     answers = root / "answers.jsonl"
     records = _read_records(answers if answers.is_file() else questions_file(root))
     gold = {
-        str(r["id"]): {"type": r["type"], "answer": r.get("answer")}
+        str(r["id"]): {"type": r["type"], "answer": r.get("answer"), "alias": r.get("alias") or []}
         for r in records
         if r.get("type")
     }

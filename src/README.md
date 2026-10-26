@@ -10,10 +10,11 @@ src/
 ├── config.py        Settings (pydantic-settings, reads .env); FINAL_MODE=1 needs a local LLM URL
 ├── models/          Question, Answer, SubmissionLine, SchemaCard
 ├── data/            DuckDBSource (read-only, guarded queries), layout.py (dataset paths)
-├── modules/         shared building blocks, no I/O policy of their own
+├── modules/         agent core: ingest, context, semantic, agents + llm, decide
 ├── services/        ingest (package → DuckDB + context), qa (LangGraph pipeline)
 ├── routes/          /health, /ask (debugging, demo UI)
-├── utils/           colored logger
+├── utils/           deterministic helpers: format, timeparse, text, health, logger
+├── evaluate/        official PA scorer (rulebook §9); used by scripts/eval.py, not by the pipeline
 └── assets/          prompt_templates/, skills/, semantic/
 ```
 
@@ -21,6 +22,15 @@ src/
 
 `__main__` / `routes` → `services/<name>/service.py` → `modules/` + `data/` + `utils/`.
 A service does not define modules; it composes the shared ones.
+
+What goes where:
+- `modules/` holds components whose behaviour *is* the agent's logic. Changing them changes what
+  the agent reads, plans or decides: ingest, context, semantic, agents, llm, decide.
+- `utils/` holds deterministic helpers with fixed, spec-driven behaviour: answer formatting,
+  time-expression parsing, text folding, health probes, logging. `utils/` never
+  imports from `modules/`.
+- `evaluate/` is the official PA scorer. It judges the pipeline's output and is never imported
+  by it, so it stays outside both.
 
 `services/qa/graph.py` is the per-question LangGraph:
 `prepare` (time ranges, entity links; no LLM) → `generate` (k prompt variants, 1 step) → `execute`

@@ -1,6 +1,21 @@
+import json
+
 import pytest
 
-from scripts.eval import normalize_string, score_line, subset_ids, tau_curve
+from scripts.eval import subset_ids
+from src.evaluate import (
+    check_format,
+    judge,
+    normalize_string,
+    parse_line,
+    read_submission,
+    score_line,
+    score_submission,
+    summarize,
+    tau_curve,
+)
+
+TABLE = {"columns": ["khach_hang", "so_tien_no"], "rows": [["Chị Lan", 3200000], ["Anh Ba", 500]]}
 
 
 def test_normalize_string_keeps_diacritics():
@@ -11,17 +26,96 @@ def test_normalize_string_keeps_diacritics():
 @pytest.mark.parametrize(
     "pred, gold, score",
     [
+        # number / percent: JSON number, exact up to float error
         ({"type": "number", "answer": 12.0}, {"type": "number", "answer": 12}, 1),
-        ({"type": "number", "answer": 12.004}, {"type": "number", "answer": 12}, 1),
-        ({"type": "number", "answer": 12.01}, {"type": "number", "answer": 12}, -1),
+        ({"type": "number", "answer": 12.0000000001}, {"type": "number", "answer": 12}, 1),
+        ({"type": "number", "answer": 12.004}, {"type": "number", "answer": 12}, -1),
+        ({"type": "number", "answer": "4820000"}, {"type": "number", "answer": 4820000}, -1),
+        ({"type": "number", "answer": True}, {"type": "number", "answer": 1}, -1),
         ({"type": "percent", "answer": -5.5}, {"type": "percent", "answer": 5.5}, -1),
+        ({"type": "percent", "answer": 0.124}, {"type": "percent", "answer": 12.4}, -1),
+        ({"type": "percent", "answer": "12.4%"}, {"type": "percent", "answer": 12.4}, -1),
+        ({"type": "number", "answer": 12.4}, {"type": "percent", "answer": 12.4}, -1),
+        # string: case / punctuation ignored, diacritics count, aliases accepted
         ({"type": "string", "answer": "cà phê sữa"}, {"type": "string", "answer": "Cà Phê Sữa"}, 1),
-        ({"type": "string", "answer": "SP01"}, {"type": "string", "answer": ["Cà phê", "SP01"]}, 1),
+        (
+            {"type": "string", "answer": "Sting dầu 330ml"},
+            {"type": "string", "answer": "Sting dâu 330ml"},
+            -1,
+        ),
+        (
+            {"type": "string", "answer": "sp0001"},
+            {"type": "string", "answer": "Xi măng", "alias": ["SP0001"]},
+            1,
+        ),
+        ({"type": "string", "answer": ["Xi măng"]}, {"type": "string", "answer": "Xi măng"}, -1),
+        # date / boolean
         ({"type": "date", "answer": "2026-10"}, {"type": "date", "answer": "2026-10"}, 1),
+        ({"type": "date", "answer": "15/08/2026"}, {"type": "date", "answer": "2026-08-15"}, -1),
+        ({"type": "boolean", "answer": False}, {"type": "boolean", "answer": False}, 1),
+        ({"type": "boolean", "answer": "true"}, {"type": "boolean", "answer": True}, -1),
+        ({"type": "boolean", "answer": 1}, {"type": "boolean", "answer": True}, -1),
+        # list: ordered, per-position aliases
         ({"type": "list", "answer": ["a", "b"]}, {"type": "list", "answer": ["b", "a"]}, -1),
-        ({"type": "list", "answer": ["a", 2]}, {"type": "list", "answer": ["A", 2.0]}, 1),
-        ({"type": "table", "answer": [["a", 1]]}, {"type": "table", "answer": [["a", 1.0]]}, 1),
-        ({"type": "boolean", "answer": True}, {"type": "boolean", "answer": "true"}, 1),
+        ({"type": "list", "answer": ["A", 2.0]}, {"type": "list", "answer": ["a", 2]}, 1),
+        (
+            {"type": "list", "answer": ["SP0003", "Cà phê đen (M)"]},
+            {
+                "type": "list",
+                "answer": ["Cà phê sữa (M)", "Cà phê đen (M)"],
+                "alias": [["SP0003"], ["SP0001"]],
+            },
+            1,
+        ),
+        ({"type": "list", "answer": "a, b"}, {"type": "list", "answer": ["a", "b"]}, -1),
+        # table: rows unordered, columns by name else position, row-name aliases
+        ({"type": "table", "answer": TABLE}, {"type": "table", "answer": TABLE}, 1),
+        (
+            {
+                "type": "table",
+                "answer": {
+                    "columns": ["khach_hang", "so_tien_no"],
+                    "rows": [["anh ba", 500], ["chị lan", 3200000.0]],
+                },
+            },
+            {"type": "table", "answer": TABLE},
+            1,
+        ),
+        (
+            {
+                "type": "table",
+                "answer": {
+                    "columns": ["so_tien_no", "khach_hang"],
+                    "rows": [[3200000, "Chị Lan"], [500, "Anh Ba"]],
+                },
+            },
+            {"type": "table", "answer": TABLE},
+            1,
+        ),
+        (
+            {
+                "type": "table",
+                "answer": {
+                    "columns": ["ten", "tien"],
+                    "rows": [["KH01", 3200000], ["Anh Ba", 500]],
+                },
+            },
+            {"type": "table", "answer": TABLE, "alias": [["KH01"], ["KH02"]]},
+            1,
+        ),
+        (
+            {
+                "type": "table",
+                "answer": {
+                    "columns": ["khach_hang", "so_tien_no"],
+                    "rows": [["Chị Lan", "3.200.000đ"], ["Anh Ba", 500]],
+                },
+            },
+            {"type": "table", "answer": TABLE},
+            -1,
+        ),
+        ({"type": "table", "answer": TABLE["rows"]}, {"type": "table", "answer": TABLE}, -1),
+        # abstain, missing, unanswerable
         ({"type": "abstain", "answer": None}, {"type": "number", "answer": 1}, 0),
         (None, {"type": "number", "answer": 1}, 0),
         ({"type": "number", "answer": 1}, {"type": "unanswerable", "answer": None}, -1),
@@ -32,6 +126,62 @@ def test_normalize_string_keeps_diacritics():
 )
 def test_score_line(pred, gold, score):
     assert score_line(pred, gold) == score
+
+
+def test_judge_reasons():
+    gold = {"type": "number", "answer": 5}
+    assert judge({"type": "percent", "answer": 5}, gold) == (-1, "wrong_type")
+    assert judge({"type": "number", "answer": "5"}, gold) == (-1, "bad_format")
+    assert judge({"type": "number", "answer": 6}, gold) == (-1, "wrong_value")
+    assert judge(None, gold) == (0, "missing")
+
+
+def test_check_format():
+    assert check_format("date", "2025-09")
+    assert not check_format("date", "tháng 9/2025")
+    assert check_format("table", {"columns": [], "rows": []})
+    assert not check_format("table", {"columns": ["a"], "rows": ["x"]})
+
+
+@pytest.mark.parametrize(
+    "raw, readable",
+    [
+        ('{"id": "q1", "type": "number", "answer": 3}', True),
+        ('{"id": "q1", "type": "unanswerable", "reason": "no data"}', True),
+        ('{"id": "q1", "type": "unanswerable", "reason": 3}', False),  # rulebook: counts as blank
+        ('{"id": "q1", "type": "money", "answer": 3}', False),
+        ('{"type": "number", "answer": 3}', False),
+        ("not json", False),
+    ],
+)
+def test_parse_line(raw, readable):
+    assert (parse_line(raw) is not None) == readable
+
+
+def test_read_submission_first_line_wins_and_skips_garbage():
+    lines = [
+        json.dumps({"id": "a", "type": "number", "answer": 1}),
+        "{broken",
+        json.dumps({"id": "a", "type": "number", "answer": 2}),
+        "",
+    ]
+    assert read_submission(lines) == {"a": {"id": "a", "type": "number", "answer": 1}}
+
+
+def test_score_submission_and_summary():
+    golds = {
+        "a": {"type": "number", "answer": 1},
+        "b": {"type": "number", "answer": 2},
+        "c": {"type": "unanswerable", "answer": None},
+    }
+    preds = {
+        "a": {"id": "a", "type": "number", "answer": 1},
+        "c": {"id": "c", "type": "number", "answer": 0},
+        "zzz": {"id": "zzz", "type": "number", "answer": 0},  # not in gold: ignored
+    }
+    scores = [s.score for s in score_submission(preds, golds)]
+    assert scores == [1, 0, -1]
+    assert summarize(scores) == {"n": 3, "pa": 0.0, "correct": 1, "wrong": 1, "abstain": 1}
 
 
 def test_subset_is_fixed():
@@ -47,7 +197,7 @@ def test_tau_curve():
         "a": {"agreement": 1.0, "top": {"type": "number", "value": 1}},
         "b": {"agreement": 0.5, "top": {"type": "number", "value": 3}},
     }
-    curve = dict(tau_curve(traces, golds))
+    curve = dict(tau_curve(traces, golds, [0.0, 0.6, 1.0]))
     assert curve[0.0] == 0.0  # +1 - 1
     assert curve[0.6] == 0.5  # b abstains
     assert curve[1.0] == 0.5

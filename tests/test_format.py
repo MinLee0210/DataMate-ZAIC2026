@@ -3,7 +3,7 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from src.modules.format import FormatError, format_result, round_number
+from src.utils.format import FormatError, format_result, round_number
 
 
 def frame(rows, columns=("a",)):
@@ -46,7 +46,10 @@ def test_scalar_types():
 def test_list_and_table_keep_row_order():
     rows = [["B", 2.5], ["A", 1.0]]
     assert format_result("list", frame(rows, ("p", "v"))) == ["B", "A"]
-    assert format_result("table", frame(rows, ("p", "v"))) == [["B", 2.5], ["A", 1]]
+    assert format_result("table", frame(rows, ("p", "v"))) == {
+        "columns": ["p", "v"],
+        "rows": [["B", 2.5], ["A", 1]],
+    }
 
 
 @pytest.mark.parametrize(

@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -59,10 +60,13 @@ class QAService:
         Any failure is logged and becomes `abstain` (0 points) rather than a wrong answer.
         """
         trace: dict = {"id": question.id, "business_id": question.business_id}
+        self.agent.llm.pop_usage()  # drop records left by an earlier failed question
         try:
+            started = time.perf_counter()
             business = self.ingest.load(
                 question.business_id, self.package_dir(question.business_id)
             )
+            trace["ingest_s"] = round(time.perf_counter() - started, 4)
             state = self.graph.invoke(
                 {
                     "question": question.question,
@@ -75,9 +79,12 @@ class QAService:
         except Exception as e:
             logger.exception("question %s failed, abstaining", question.id)
             trace["error"] = f"{type(e).__name__}: {e}"
+            trace["llm"] = [u.to_dict() for u in self.agent.llm.pop_usage()]
             return Answer(type="abstain"), trace
         decision = state["decision"]
         trace.update(
+            llm=[u.to_dict() for u in self.agent.llm.pop_usage()],
+            timings={name: round(s, 4) for name, s in state.get("timings", {}).items()},
             agreement=decision.agreement,
             top=decision.top.model_dump() if decision.top else None,
             votes=decision.votes,

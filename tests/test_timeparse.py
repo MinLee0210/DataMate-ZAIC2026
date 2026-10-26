@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from src.modules.timeparse import render_time_ranges, resolve
+from src.utils.timeparse import render_time_ranges, resolve
 
 AS_OF = date(2026, 10, 28)  # a Wednesday
 

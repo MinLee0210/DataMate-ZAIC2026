@@ -6,7 +6,7 @@
 The teacher is a strong hosted model (API allowed here only, never imported by src/). It explores
 one business through read-only tools, writes Vietnamese questions in the competition's colloquial
 style, and submits each with a DuckDB query. Answers are computed here by executing the query and
-formatting it with src/modules/format, never taken from the model's text.
+formatting it with src/utils/format.py, never taken from the model's text.
 
 Hard rules: train split only (never public_test or private_test), and nothing keyed on a business.
 """
@@ -27,9 +27,9 @@ from src.data.duckdb import DuckDBSource
 from src.data.layout import calendar_file, list_businesses, split_dir
 from src.models import VALUE_TYPES
 from src.modules.context import render_schema_card
-from src.modules.format import format_result
 from src.services.ingest import IngestService
 from src.utils import get_logger
+from src.utils.format import format_result
 
 logger = get_logger("datagen.teacher")
 

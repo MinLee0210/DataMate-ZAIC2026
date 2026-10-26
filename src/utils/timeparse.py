@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from src.modules.context.entities import fold
+from src.utils.text import fold
 
 # common chat abbreviations, applied to folded text
 _ABBREVIATIONS = {

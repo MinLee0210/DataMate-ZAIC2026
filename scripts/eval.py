@@ -1,102 +1,34 @@
-"""Local Penalized Accuracy scorer and eval runner.
+"""Eval runner: run the pipeline on a train subset and score it with src/evaluate/.
 
     uv run python -m scripts.eval --subset dev200 --topic baseline          # run + score
     uv run python -m scripts.eval --pred result/submission.jsonl --topic x   # score only
 
-Writes docs/analysis/<yyyy-mm-dd>/<topic>/summary.md (+ scored.jsonl) and appends a row to
-docs/EXPERIMENTS.md. Never copy numbers by hand.
+Writes docs/analysis/<yyyy-mm-dd>/<topic>/summary.md (+ scored.jsonl, metrics.json) and appends a
+row to docs/EXPERIMENTS.md. Never copy numbers by hand.
 """
 
 import argparse
 import json
-import math
 import random
-import re
 import subprocess
 import sys
-import unicodedata
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
-from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from src.evaluate import (  # noqa: E402
+    diagnostics,
+    efficiency,
+    read_submission,
+    score_submission,
+    summarize,
+    tau_curve,
+)
+
 TAU_GRID = [round(0.05 * i, 2) for i in range(21)]
-
-
-# ------------------------------------------------------- scorer (rules: docs/PROJECT.md §2)
-
-
-def normalize_string(text: Any) -> str:
-    """NFC, lowercase, non-alphanumeric -> space, collapse spaces; diacritics are kept."""
-    text = unicodedata.normalize("NFC", str(text)).lower()
-    text = "".join(c if c.isalnum() else " " for c in text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _number(value: Any) -> float | None:
-    try:
-        x = float(str(value).replace(",", "").strip().rstrip("%"))
-    except (TypeError, ValueError):
-        return None
-    return None if math.isnan(x) else x
-
-
-def _same_number(pred: Any, gold: Any) -> bool:
-    a, b = _number(pred), _number(gold)
-    return a is not None and b is not None and round(a, 2) == round(b, 2)
-
-
-def _same_scalar(pred: Any, gold: Any) -> bool:
-    """Element of a list or table: numbers by value, everything else as a normalized string."""
-    if isinstance(gold, list):  # accepted spellings
-        return any(_same_scalar(pred, g) for g in gold)
-    if _number(gold) is not None and _number(pred) is not None:
-        return _same_number(pred, gold)
-    return normalize_string(pred) == normalize_string(gold)
-
-
-def match_value(answer_type: str, pred: Any, gold: Any) -> bool:
-    if answer_type in ("number", "percent"):
-        return _same_number(pred, gold)
-    if answer_type == "string":
-        golds = gold if isinstance(gold, list) else [gold]
-        return any(normalize_string(pred) == normalize_string(g) for g in golds)
-    if answer_type == "date":
-        return str(pred).strip() == str(gold).strip()
-    if answer_type == "boolean":
-        return str(pred).strip().lower() == str(gold).strip().lower()
-    if answer_type == "list":
-        return (
-            isinstance(pred, list)
-            and isinstance(gold, list)
-            and len(pred) == len(gold)
-            and all(_same_scalar(p, g) for p, g in zip(pred, gold, strict=True))
-        )
-    if answer_type == "table":
-        return (
-            isinstance(pred, list)
-            and isinstance(gold, list)
-            and len(pred) == len(gold)
-            and all(
-                isinstance(p, list)
-                and len(p) == len(g)
-                and all(_same_scalar(a, b) for a, b in zip(p, g, strict=True))
-                for p, g in zip(pred, gold, strict=True)
-            )
-        )
-    return False
-
-
-def score_line(pred: dict | None, gold: dict) -> int:
-    """+1 correct, 0 abstain or missing, -1 wrong (answering an unanswerable one is wrong)."""
-    if pred is None or pred.get("type") == "abstain":
-        return 0
-    if gold["type"] == "unanswerable" or pred["type"] == "unanswerable":
-        return 1 if pred["type"] == gold["type"] else -1
-    if pred["type"] != gold["type"] and {pred["type"], gold["type"]} != {"number", "percent"}:
-        return -1
-    return 1 if match_value(gold["type"], pred.get("answer"), gold.get("answer")) else -1
 
 
 # ---------------------------------------------------------------- report
@@ -108,33 +40,6 @@ def _load_jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def _summary(scores: list[int]) -> dict:
-    n = len(scores)
-    return {
-        "n": n,
-        "pa": round(sum(scores) / n, 4) if n else 0.0,
-        "correct": scores.count(1),
-        "wrong": scores.count(-1),
-        "abstain": scores.count(0),
-    }
-
-
-def tau_curve(traces: dict[str, dict], golds: dict[str, dict]) -> list[tuple[float, float]]:
-    """PA if we had answered the vote winner only when agreement >= tau."""
-    curve = []
-    for tau in TAU_GRID:
-        scores = []
-        for qid, gold in golds.items():
-            t = traces.get(qid) or {}
-            top = t.get("top")
-            if top is None or t.get("agreement", 0.0) < tau:
-                scores.append(0)
-            else:
-                scores.append(score_line({"type": top["type"], "answer": top.get("value")}, gold))
-        curve.append((tau, round(sum(scores) / len(scores), 4) if scores else 0.0))
-    return curve
-
-
 def _table(title: str, groups: dict[str, list[int]]) -> list[str]:
     lines = [
         f"### By {title}",
@@ -143,31 +48,98 @@ def _table(title: str, groups: dict[str, list[int]]) -> list[str]:
         "|---|---|---|---|---|---|",
     ]
     for name in sorted(groups):
-        s = _summary(groups[name])
+        s = summarize(groups[name])
         lines.append(
             f"| {name} | {s['n']} | {s['pa']} | {s['correct']} | {s['wrong']} | {s['abstain']} |"
         )
     return lines + [""]
 
 
+def _metric_rows(prefix: str, value: object) -> list[str]:
+    """Flatten nested metric dicts into `| name | value |` rows."""
+    if isinstance(value, dict):
+        rows = []
+        for key, sub in value.items():
+            rows += _metric_rows(f"{prefix}.{key}" if prefix else key, sub)
+        return rows
+    return [f"| {prefix} | {value} |"]
+
+
+def _describe_table(title: str, stats: dict[str, dict]) -> list[str]:
+    cols = ["n", "total", "mean", "p50", "p90", "p95", "max"]
+    lines = [f"#### {title}", "", "| metric | " + " | ".join(cols) + " |"]
+    lines.append("|---" * (len(cols) + 1) + "|")
+    for name, d in stats.items():
+        lines.append(f"| {name} | " + " | ".join(str(d.get(c, "")) for c in cols) + " |")
+    return lines + [""]
+
+
+def efficiency_section(eff: dict) -> list[str]:
+    lines = [
+        "### Efficiency (not scored; inference time is the official tie-break)",
+        "",
+        f"- questions: {eff['questions']}; at the mean pace, "
+        f"{eff['questions_per_6h_at_mean']} questions fit in 6 h",
+        f"- LLM time share of wall time: {eff['llm_time_share']}",
+        f"- LLM calls: {eff['llm_calls']['total']} ({eff['llm_calls']['failed']} failed); "
+        f"questions over the 4-step limit: {eff['llm_steps']['over_4']}",
+        f"- tokens: {eff['tokens']['prompt_total']} prompt, "
+        f"{eff['tokens']['completion_total']} completion",
+        "",
+    ]
+    lines += _describe_table(
+        "Per question",
+        {
+            "seconds": eff["seconds_per_question"],
+            "llm seconds": eff["llm_seconds_per_question"],
+            "ingest seconds": eff["ingest_seconds"],
+            "llm calls": eff["llm_calls"]["per_question"],
+            "llm steps": eff["llm_steps"]["per_question"],
+            "prompt tokens": eff["tokens"]["prompt_per_question"],
+            "completion tokens": eff["tokens"]["completion_per_question"],
+        },
+    )
+    lines += _describe_table(
+        "Per LLM call",
+        {
+            "time to first token (s)": eff["ttft_seconds"],
+            "latency (s)": eff["call_latency_seconds"],
+            "decode tokens/s": eff["decode_tokens_per_second"],
+            "prompt tokens": eff["tokens"]["prompt_per_call"],
+            "completion tokens": eff["tokens"]["completion_per_call"],
+        },
+    )
+    if eff["stage_seconds"]:
+        lines += _describe_table("Per graph node (seconds)", eff["stage_seconds"])
+    return lines
+
+
 def report(
-    preds: list[dict],
+    preds: dict[str, dict],
     golds: dict[str, dict],
     traces: dict[str, dict],
     questions: dict[str, dict],
     topic: str,
     command: str,
 ) -> Path:
-    by_id = {p["id"]: p for p in preds}
     scored = []
     by_type: dict[str, list[int]] = defaultdict(list)
     by_category: dict[str, list[int]] = defaultdict(list)
-    for qid, gold in golds.items():
-        s = score_line(by_id.get(qid), gold)
-        scored.append({"id": qid, "score": s, "pred": by_id.get(qid), "gold": gold})
-        by_type[gold["type"]].append(s)
-        by_category[str(questions.get(qid, {}).get("category") or "unknown")].append(s)
-    total = _summary([r["score"] for r in scored])
+    for row in score_submission(preds, golds):
+        gold = golds[row.id]
+        scored.append(
+            {
+                "id": row.id,
+                "score": row.score,
+                "reason": row.reason,
+                "pred": preds.get(row.id),
+                "gold": gold,
+            }
+        )
+        by_type[gold["type"]].append(row.score)
+        by_category[str(questions.get(row.id, {}).get("category") or "unknown")].append(row.score)
+    total = summarize([r["score"] for r in scored])
+    reasons = Counter(r["reason"] for r in scored)
 
     out = ROOT / "docs" / "analysis" / date.today().isoformat() / topic
     out.mkdir(parents=True, exist_ok=True)
@@ -183,11 +155,22 @@ def report(
         f"{total['wrong']} wrong, {total['abstain']} abstain.",
         "",
     ]
+    lines += ["### By verdict", "", "| verdict | n |", "|---|---|"]
+    lines += [f"| {k} | {v} |" for k, v in sorted(reasons.items())] + [""]
     lines += _table("answer type", by_type) + _table("question category", by_category)
+    run_traces = [traces[i] for i in golds if i in traces]
+    diag = diagnostics(preds, golds, traces)
+    eff = efficiency(run_traces)
+    lines += ["### Diagnostics (not scored)", "", "| metric | value |", "|---|---|"]
+    lines += _metric_rows("", diag) + [""]
     if traces:
         lines += ["### PA vs tau (vote agreement threshold)", "", "| tau | PA |", "|---|---|"]
-        lines += [f"| {tau} | {pa} |" for tau, pa in tau_curve(traces, golds)] + [""]
+        lines += [f"| {tau} | {pa} |" for tau, pa in tau_curve(traces, golds, TAU_GRID)] + [""]
+    if run_traces:
+        lines += efficiency_section(eff)
     (out / "summary.md").write_text("\n".join(lines))
+    metrics = {"pa": total, "verdicts": dict(reasons), "diagnostics": diag, "efficiency": eff}
+    (out / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2))
 
     experiments = ROOT / "docs" / "EXPERIMENTS.md"
     rel = out.relative_to(ROOT / "docs")
@@ -195,6 +178,8 @@ def report(
         f.write(
             f"| {date.today().isoformat()} | {topic} | `{command}` | PA {total['pa']} "
             f"({total['correct']}/{total['wrong']}/{total['abstain']}), "
+            f"{eff['seconds_per_question'].get('mean', '-')} s/q, "
+            f"{eff['tokens']['prompt_per_question'].get('mean', '-')} prompt tok/q, "
             f"[summary]({rel}/summary.md) |\n"
         )
     return out / "summary.md"
@@ -214,7 +199,6 @@ def subset_ids(ids: list[str], subset: str, seed: int = 2026) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    sys.path.insert(0, str(ROOT))
     from src.config import settings
     from src.data.layout import load_gold, split_dir
 
@@ -257,7 +241,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         pred_path = run_dir / "submission.jsonl"
     traces = {t["id"]: t for t in _load_jsonl(trace_path)}
-    summary = report(_load_jsonl(pred_path), golds, traces, questions, args.topic, command)
+    preds = read_submission(pred_path.read_text().splitlines()) if pred_path.is_file() else {}
+    summary = report(preds, golds, traces, questions, args.topic, command)
     print(summary.read_text())
     return 0
 

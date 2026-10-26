@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_max_tokens: int = 1024
     llm_timeout_s: float = 120.0
+    # stream replies so time to first token can be measured; same output either way
+    llm_stream: bool = True
     # JSON merged into every request body, e.g. Qwen3 without thinking on vLLM:
     # '{"chat_template_kwargs": {"enable_thinking": false}}'
     llm_extra_body: str = ""

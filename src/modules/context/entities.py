@@ -1,11 +1,11 @@
 import re
-import unicodedata
 from dataclasses import dataclass
 
 import duckdb
 from rapidfuzz import fuzz, process
 
 from src.models import SchemaCard
+from src.utils.text import fold
 
 # text columns with more distinct values than this are free text (notes, addresses), not entities
 MAX_ENTITY_VALUES = 5000
@@ -25,16 +25,6 @@ class EntityMatch:
     mention: str
     entity: Entity
     score: float
-
-
-def fold(text: str, keep: str = "") -> str:
-    """Lowercase, drop diacritics, collapse non-alphanumerics: 'Cà phê sữa' -> 'ca phe sua'.
-
-    Characters in `keep` (e.g. '/-' for dates) are not collapsed.
-    """
-    text = unicodedata.normalize("NFD", text.replace("đ", "d").replace("Đ", "D"))
-    text = "".join(c for c in text if unicodedata.category(c) != "Mn").lower()
-    return re.sub(rf"[^a-z0-9{re.escape(keep)}]+", " ", text).strip()
 
 
 # chat spellings mapped to one canonical form, applied to both sides of a match

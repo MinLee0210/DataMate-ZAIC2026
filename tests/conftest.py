@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 import src
 from scripts.devfree.toy import write_toy_split
+from src.modules.llm import LLMUsage
 
 
 class FakeLLM:
@@ -15,12 +16,27 @@ class FakeLLM:
         self.error = error
         self.messages = None
         self.calls = []
+        self.usage = []
+
+    def pop_usage(self):
+        usage, self.usage = self.usage, []
+        return usage
 
     def complete(self, messages, seed=None):
         if self.error:
+            self.usage.append(LLMUsage(latency_s=0.01, error=repr(self.error)))
             raise self.error
         self.messages = messages
         self.calls.append((messages[-1]["content"], seed))
+        # fake usage: one token per 4 characters, fixed timings
+        self.usage.append(
+            LLMUsage(
+                prompt_tokens=sum(len(m["content"]) for m in messages) // 4,
+                completion_tokens=20,
+                ttft_s=0.05,
+                latency_s=0.25,
+            )
+        )
         if callable(self.replies):
             return self.replies(messages[-1]["content"])
         if isinstance(self.replies, list):

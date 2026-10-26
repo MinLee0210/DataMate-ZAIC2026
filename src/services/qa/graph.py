@@ -6,11 +6,14 @@
 
 LLM calls: generate (1 step, k prompt variants) + repair (<= max_repairs steps). With the default
 max_repairs = 2 that is 3 LLM steps, under the limit of 4 per question.
+
+Each node adds its wall time to `timings` (seconds per node name, summed over repeats).
 """
 
+import time
 from collections.abc import Callable
 from datetime import date
-from typing import TypedDict
+from typing import Annotated, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -18,12 +21,28 @@ from src.data.duckdb import DuckDBSource
 from src.modules.agents.sql_agent import PlanParseError, SQLAgent, SQLPlan
 from src.modules.context import link_entities, render_entity_matches
 from src.modules.decide import UNANSWERABLE, Candidate, Decision, decide
-from src.modules.format import format_result
-from src.modules.timeparse import render_time_ranges, resolve
 from src.services.ingest import BusinessContext
 from src.utils import get_logger
+from src.utils.format import format_result
+from src.utils.timeparse import render_time_ranges, resolve
 
 logger = get_logger(__name__)
+
+
+def _sum_timings(left: dict[str, float], right: dict[str, float]) -> dict[str, float]:
+    merged = dict(left or {})
+    for name, seconds in (right or {}).items():
+        merged[name] = merged.get(name, 0.0) + seconds
+    return merged
+
+
+def _timed(name: str, node: Callable[[dict], dict]) -> Callable[[dict], dict]:
+    def run(state: dict) -> dict:
+        started = time.perf_counter()
+        update = node(state)
+        return {**update, "timings": {name: time.perf_counter() - started}}
+
+    return run
 
 
 class QAState(TypedDict, total=False):
@@ -36,6 +55,7 @@ class QAState(TypedDict, total=False):
     candidates: list[Candidate]
     repairs: int
     decision: Decision
+    timings: Annotated[dict[str, float], _sum_timings]
 
 
 def build_qa_graph(
@@ -118,11 +138,11 @@ def build_qa_graph(
         return {"decision": decide(state["candidates"], tau)}
 
     graph = StateGraph(QAState)
-    graph.add_node("prepare", prepare)
-    graph.add_node("generate", generate)
-    graph.add_node("execute", execute)
-    graph.add_node("repair", repair)
-    graph.add_node("decide", decide_node)
+    graph.add_node("prepare", _timed("prepare", prepare))
+    graph.add_node("generate", _timed("generate", generate))
+    graph.add_node("execute", _timed("execute", execute))
+    graph.add_node("repair", _timed("repair", repair))
+    graph.add_node("decide", _timed("decide", decide_node))
     graph.add_edge(START, "prepare")
     graph.add_edge("prepare", "generate")
     graph.add_edge("generate", "execute")

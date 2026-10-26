@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from src.config import settings
-from src.modules.health_module import HealthModule
 from src.routes import api_router
 from src.utils import get_logger
+from src.utils.health import HealthModule
 
 logger = get_logger(__name__)
 
