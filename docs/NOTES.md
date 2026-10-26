@@ -2,6 +2,38 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-26 - Extra metrics: tokens, TTFT, latency, diagnostics
+- `LLM.complete` records one `LLMUsage` per call: prompt and completion tokens, time to first token,
+  latency and error. `QAService` puts them in the trace as `llm`, with `timings` (seconds per graph
+  node) and `ingest_s`. `src/evaluate/metrics.py` computes efficiency and diagnostics from the
+  trace, and `scripts/eval.py` reports them and writes `metrics.json`.
+  Why: inference time is the official tie-break and the private run has a 6 h limit; tokens and
+  TTFT show where time goes. Coverage, oracle@k and the agreement AUROC show whether abstention
+  or generation is the bottleneck.
+- Replies are streamed by default (`LLM_STREAM=true`) to measure TTFT; the generated output is
+  the same either way. Checked on the HF router (Qwen3-14B via deepinfra): usage arrives in the
+  last chunk.
+
+## 2026-10-26 - modules/ = agent core, utils/ = deterministic helpers
+- `modules/` keeps what defines the agent's behaviour: `ingest/`, `context/`, `semantic/`,
+  `agents/` + `llm.py`, `decide/`.
+- Moved to `utils/` as single files: `format.py`, `timeparse.py`, `health.py` (HealthModule, no
+  longer a `BaseModules`), and `text.py` (`fold`, moved out of `context/entities.py`).
+  Why: these are deterministic, fixed by the spec or the rulebook, and are not where the agent's
+  quality is tuned. `utils/` never imports `modules/`, so `fold` had to leave `context/`.
+- The PA scorer is its own top-level package, `src/evaluate/`, outside both. Why: it judges the
+  pipeline's output and the pipeline never imports it.
+
+## 2026-10-26 - Official scorer (now src/evaluate/)
+- The scorer moved from `scripts/eval.py` to `src/evaluate/` and follows rulebook §9
+  strictly. Why: the old scorer was lenient where the official one is strict, so local PA was
+  too high. It accepted numbers given as strings, rounded both sides to 2 dp, let number and
+  percent swap, and accepted `"true"`. It also scored tables as ordered lists and ignored `alias`.
+- `load_gold` keeps `alias`. The formatter writes tables as `{"columns", "rows"}`.
+  Why: the old list-of-rows table was a wrong format, so every table answer scored −1.
+- Check: all train gold answers, and their alias forms, score PA 1.0 with the new scorer.
+- The eval summary adds a "by verdict" count (`wrong_type` / `bad_format` / `wrong_value`).
+
 ## 2026-10-26 - App settings, demo UI later
 - `APP_NAME`, `APP_VERSION`, `APP_HOST`, `APP_PORT`, `APP_RELOAD`, `LOG_LEVEL` are settings (`.env`).
   `scripts/entrypoints.sh` reads only the `APP_*` keys from `.env`. Why: one place for config, and

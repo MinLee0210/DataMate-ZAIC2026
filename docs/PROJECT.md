@@ -7,14 +7,26 @@ Output one JSONL line: `{"id", "type", "answer"}`.
 Types: number | percent | string | date | boolean | list | table | unanswerable | abstain.
 
 ## 2. Metric — Penalized Accuracy
+Official rules: the split rulebook, §9 "Đáp án và chấm điểm". Implemented in `src/evaluate/`,
+checked against all 3,000 train gold answers (and their aliases), which score PA 1.0.
 PA = (1/N) Σ s_i, with s_i = +1 correct, 0 abstain or missing, −1 wrong.
-- Answering an unanswerable question counts as wrong. No partial credit.
-- number: exact (integers, or rounded to 2 dp). percent: exact after 2-dp rounding, sign matters.
-- string: NFC, lowercase, non-alphanumeric → space, collapse spaces, diacritics kept; any accepted spelling or the code.
-- date: `yyyy-mm-dd`, or `yyyy-mm` for months. list: ordered, matched by position.
-- Ranking: the question's criterion, else the rulebook default; descending over valid orders; ties by code ascending.
+- **One format per type; a wrong format is wrong.** The format is checked first, then the value.
+  number / percent: a JSON number (not a string), percent in percentage points (`12.4`, not `0.124`).
+  date: `"YYYY-MM-DD"`, or `"YYYY-MM"` for months. boolean: `true` / `false`. string: a JSON string.
+  list: a JSON array. table: `{"columns": [...], "rows": [[...], ...]}`.
+- number / percent: exact; only float error is ignored. Money is whole VND; other averages and
+  percents are rounded to 2 dp, unless a rulebook rule says otherwise.
+- string: case, spaces and punctuation ignored, diacritics count; any spelling in the shop's files,
+  or the code, is accepted (`alias` in train answers).
+- list: same items, same order (per-position aliases). table: one row per object, column 1 is the
+  name; columns matched by name, else by position; row order does not matter.
+- unanswerable: `{"type": "unanswerable", "reason": "..."}`. A non-string `reason` makes the line
+  unreadable (0). Answering an unanswerable question is wrong.
+- Ranking: the question's criterion, else the rulebook default; descending; ties by code ascending.
 - Tie-break: total inference time in the organisers' rerun, then earlier submission.
 - Consequence: answer only when P(correct) > 0.5. Calibration is a first-class objective.
+- Assumptions (not stated): invalid JSON, a missing id or an unknown type counts as blank; for a
+  repeated id, the first readable line counts.
 
 ## 3. Constraints
 | Item | Limit |

@@ -38,9 +38,13 @@ src/
 │   ├── ingest/            header detection, multi-sheet, merged cells, type inference
 │   ├── context/           auto-authored context: schema card, entity dict, glossary
 │   ├── semantic/          rulebook → DuckDB views/macros (valid_orders, revenue, cogs, overdue_debt, ...)
-│   ├── timeparse/         as_of_date, relative expressions, lunar calendar (deterministic)
-│   ├── decide/            vote over executed results → answer | abstain | unanswerable
-│   └── format/            typed answer formatting and rounding
+│   └── decide/            vote over executed results → answer | abstain | unanswerable
+├── utils/                 deterministic helpers, never import modules/
+│   ├── format.py          typed answer formatting and rounding
+│   ├── timeparse.py       as_of_date, relative expressions, lunar calendar (deterministic)
+│   ├── text.py            fold (accent/case folding)
+│   └── health.py, logger.py
+├── evaluate/              official PA scorer (rulebook §9), used by scripts/eval.py only
 ├── data/duckdb.py         DuckDB DataSource (connect/ping/close)
 ├── routes/                keep /health; optional POST /ask for manual debugging only
 └── assets/
@@ -49,7 +53,7 @@ src/
                            business-metrics, unanswerable, answer-types
 scripts/
 ├── infer.sh               start vLLM, wait for it, run python -m src
-├── eval.py                local PA scorer, writes docs/analysis/<date>/<topic>/
+├── eval.py                eval runner (scores with src/evaluate/), writes docs/analysis/<date>/<topic>/
 ├── datagen/  devfree/     API allowed here, never imported by src/
 ```
 Remove the Postgres/Milvus datasources and their compose services. They are not used.
@@ -78,7 +82,7 @@ Remove the Postgres/Milvus datasources and their compose services. They are not 
 ## Code conventions
 Python 3.12, `uv`, ruff (line 100, rules E F I B UP). Type hints everywhere.
 Tests need no network and no GPU: fake the LLM as in the template. Unit tests are required for
-`timeparse/`, `format/`, `decide/` and the scorer. No notebooks in `src/`.
+`utils/timeparse.py`, `utils/format.py`, `evaluate/` (scorer) and `modules/decide/`. No notebooks in `src/`.
 
 ## Don't
 - Don't look for, infer or store test answers.

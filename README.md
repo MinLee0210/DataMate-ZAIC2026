@@ -61,12 +61,13 @@ src/
 ├── modules/
 │   ├── ingest/            readers + cleaning (headers, merged cells, types)
 │   ├── context/           schema card, entity dict + linking
-│   ├── timeparse/         Vietnamese time expressions → date ranges
 │   ├── semantic/          rulebook views/macros from assets/semantic/*.sql
 │   ├── agents/            BaseAgent, SQLAgent (prompts + skills from assets/)
-│   ├── format/            typed answers, rounding
 │   ├── decide/            vote, abstain, unanswerable
 │   └── llm.py             OpenAI-compatible client (seed, temperature 0)
+├── utils/                 format.py (typed answers, rounding), timeparse.py (time expressions →
+│                          date ranges), text.py, health.py, logger.py
+├── evaluate/              official PA scorer (rulebook §9), used by scripts/eval.py
 ├── services/ingest/       package → DuckDB + context, cached by content hash
 ├── services/qa/           graph.py (LangGraph), service.py
 ├── routes/                /health, /ask (debugging, demo UI)
