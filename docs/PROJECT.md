@@ -49,7 +49,7 @@ data pkg ─► INGEST (headers, sheets, merged cells, types) ─► DuckDB
 rulebook ─► SEMANTIC LAYER (written once, split-wide) + skills in assets/skills/
 question ─► TIME RESOLVER ─► ENTITY LINKING
          ─► SQL AGENT: plan → SQL (or small Python) over the semantic layer
-         ─► EXECUTE ─► repair on error (≤ 2)
+         ─► EXECUTE ─► repair on error (≤ MAX_REPAIRS, default 5)
          ─► k candidates (fixed seeds) ─► vote on executed results
          ─► DECIDE: answer | abstain (agreement < tau) | unanswerable (missing concept or column)
          ─► FORMAT ─► append to submission.jsonl

@@ -24,9 +24,9 @@ flowchart LR
     subgraph agent["DataMate agent"]
         direction LR
         generate["SQL Agent<br/>k candidates"] --> execute["Executor"]
-        execute --> repair["Repair"]
-        repair --> execute
-        execute --> decide["Decide<br/>vote · tau"]
+        execute -- "error" --> repair["Repair"]
+        repair -- "retry (up to 5 rounds)" --> execute
+        execute -- "results" --> decide["Decide<br/>vote · tau"]
     end
 
     context --> agent

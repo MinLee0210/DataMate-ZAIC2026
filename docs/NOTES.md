@@ -2,6 +2,15 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-26 - MAX_REPAIRS 2 → 5
+- The default `max_repairs` is now 5 (`MAX_REPAIRS` in `.env` overrides it). A question takes at
+  most 1 + 5 = 6 LLM steps, which exceeds the "at most 4 LLM steps" workflow rule in CLAUDE.md.
+  Repairs run only for failed candidates (bad JSON, SQL error, wrong result shape); a question
+  whose candidates all run takes 1 step as before.
+- Why: user request, to give failing candidates more chances before they count against
+  agreement. To check: the eval's `llm_steps` and `over_4` rows show how often questions go past
+  4 steps, and the seconds per question show whether the 6 h budget still holds.
+
 ## 2026-10-26 - Time handling follows rulebook §2 (T1)
 - `timeparse.py` now ends "tuần này / tháng này / quý này / năm nay" on `as_of_date`, not on the
   period end, and handles "từ đầu năm" as 01/01 → today. A quarter without a year uses this year

@@ -5,7 +5,7 @@
                               └─ repair ◄┘
 
 LLM calls: generate (1 step, k prompt variants) + repair (<= max_repairs steps). With the default
-max_repairs = 2 that is 3 LLM steps, under the limit of 4 per question.
+max_repairs = 5 that is up to 6 LLM steps; repairs run only while some candidate has failed.
 
 Each node adds its wall time to `timings` (seconds per node name, summed over repeats).
 """

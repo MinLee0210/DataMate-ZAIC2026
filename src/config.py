@@ -44,7 +44,8 @@ class Settings(BaseSettings):
     # decision policy: k candidates, answer when vote agreement >= tau
     k: int = 3
     tau: float = 0.67
-    max_repairs: int = 2
+    # repair rounds after failed candidates; each round is one LLM step (1 + max_repairs in total)
+    max_repairs: int = 5
     sql_timeout_s: float = 20.0
     max_result_rows: int = 200
     # stop answering (abstain) after this many seconds, leaving margin inside the 6 h limit
