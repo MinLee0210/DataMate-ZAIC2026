@@ -24,7 +24,7 @@ from src.modules.decide import UNANSWERABLE, Candidate, Decision, decide
 from src.services.ingest import BusinessContext
 from src.utils import get_logger
 from src.utils.format import format_result
-from src.utils.timeparse import render_time_ranges, resolve
+from src.utils.timeparse import LunarCalendar, render_time_ranges, resolve
 
 logger = get_logger(__name__)
 
@@ -68,12 +68,13 @@ def build_qa_graph(
     schema_text: Callable[[BusinessContext], str],
     sql_timeout_s: float,
     max_rows: int,
+    lunar: LunarCalendar | None = None,
 ):
     """Compile the graph. `schema_text(business)` returns the rendered schema card (cached)."""
 
     def prepare(state: QAState) -> dict:
         business = state["business"]
-        ranges = resolve(state["question"], state["as_of_date"])
+        ranges = resolve(state["question"], state["as_of_date"], lunar)
         matches = link_entities(state["question"], business.entities)
         context = {
             "readme": business.card.readme[:3000] or "(no README)",

@@ -10,6 +10,7 @@ from src.modules.context import render_schema_card
 from src.services.ingest import BusinessContext, IngestService
 from src.services.qa.graph import build_qa_graph
 from src.utils import get_logger
+from src.utils.timeparse import LunarCalendar
 
 logger = get_logger(__name__)
 
@@ -31,6 +32,7 @@ class QAService:
         self.agent = agent or SQLAgent()
         self._sources: dict[str, DuckDBSource] = {}
         self._schemas: dict[str, str] = {}
+        lunar = LunarCalendar.from_csv(ingest.calendar) if ingest.calendar else None
         self.graph = build_qa_graph(
             self.agent,
             k=settings.k,
@@ -40,6 +42,7 @@ class QAService:
             schema_text=self._schema_text,
             sql_timeout_s=settings.sql_timeout_s,
             max_rows=settings.max_result_rows,
+            lunar=lunar,
         )
 
     def _schema_text(self, business: BusinessContext) -> str:

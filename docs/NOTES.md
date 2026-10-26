@@ -2,6 +2,26 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-26 - Time handling follows rulebook §2 (T1)
+- `timeparse.py` now ends "tuần này / tháng này / quý này / năm nay" on `as_of_date`, not on the
+  period end, and handles "từ đầu năm" as 01/01 → today. A quarter without a year uses this year
+  only when it does not start after today. Why: rulebook §2 defines these as periods to the end of
+  today, and the old resolver returned future days that the data excludes anyway; the agent was
+  being told to filter on ranges that did not match the rulebook.
+- "tháng này so với tháng trước" now caps the previous month at the same day number as today
+  (month end when that day does not exist). Why: §2 compares windows with the same number of days;
+  the old whole-previous-month range gave the comparison a different denominator.
+- Tết is resolved from the split's `calendar.csv` through `LunarCalendar` (23 tháng Chạp of lunar
+  Y−1 to 10 tháng Giêng of lunar Y), and "trước Tết" is the same number of days immediately before.
+  The calendar is loaded once in `QAService` from `IngestService.calendar` and passed to the graph,
+  so no date is hard-coded and no network is needed. Why: lunar dates cannot be computed from the
+  solar date alone, and the rulebook names `calendar.csv` as the source.
+- `time-expressions/SKILL.md` is rewritten row by row from §2: future rows have not happened (with
+  the cancel/return exception), comparison operators exclude or include N, the shifts are fixed
+  clock windows, and "đến hết ngày X" is a balance counted from the start of the data.
+- Tests cover every T1 row; the Tết tests build a four-row `calendar.csv` fixture, so the suite
+  stays offline and deterministic.
+
 ## 2026-10-26 - Extra metrics: tokens, TTFT, latency, diagnostics
 - `LLM.complete` records one `LLMUsage` per call: prompt and completion tokens, time to first token,
   latency and error. `QAService` puts them in the trace as `llm`, with `timings` (seconds per graph

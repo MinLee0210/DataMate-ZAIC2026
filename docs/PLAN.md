@@ -37,7 +37,7 @@ steps, and a check that says when it is done. Do them in order within a mileston
 
 ## Milestone 1 — measured baseline (by 01/11)
 
-### T1. Make time handling match rulebook §2 *(S1, high impact, small)*
+### T1. [x] Make time handling match rulebook §2 *(S1, high impact, small)*
 **Why.** Number and percent are 82% of train answers, and most of them are bounded by time. The
 skill and the resolver currently contradict the rulebook.
 
