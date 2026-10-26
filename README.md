@@ -12,13 +12,49 @@ Penalized Accuracy (+1 / 0 / −1), so the system abstains when its executed can
 
 ## How it works
 
+```mermaid
+flowchart LR
+    data["Business data"] --> ingest["Ingest"]
+    ingest --> context["Context<br/>schema card · entities"]
+    ingest --> semantic["Semantic layer"]
+
+    question["Question"] --> time["Time resolver"]
+    question --> link["Entity linking"]
+
+    subgraph agent["DataMate agent"]
+        direction LR
+        generate["SQL Agent<br/>k candidates"] --> execute["Executor"]
+        execute --> repair["Repair"]
+        repair --> execute
+        execute --> decide["Decide<br/>vote · tau"]
+    end
+
+    context --> agent
+    semantic --> agent
+    rulebook["Rulebook skills"] --> agent
+    time --> agent
+    link --> agent
+    llm["LLM"] <--> agent
+    decide --> format["Formatter"] --> answer["Answer · Unanswerable · Abstain"]
+
+    classDef input fill:#eef2f7,stroke:#94a3b8,color:#1e293b
+    classDef knowledge fill:#e7f6ec,stroke:#86c79a,color:#1e293b
+    classDef understand fill:#fff6d9,stroke:#e3c46b,color:#1e293b
+    classDef reason fill:#efe9fb,stroke:#a993d9,color:#1e293b
+    classDef model fill:#fdeee3,stroke:#e6a77a,color:#1e293b
+    classDef output fill:#e3f4f7,stroke:#7cc1cf,color:#1e293b
+
+    class data,question input
+    class ingest,context,semantic,rulebook knowledge
+    class time,link understand
+    class generate,execute,repair,decide reason
+    class llm model
+    class format,answer output
+    style agent fill:#f8f5fe,stroke:#a993d9,color:#1e293b
 ```
-business package ─► ingest (headers, sheets, merged cells, vi number formats) ─► DuckDB
-                 ─► auto-authored context: schema card (YAML), entity dict, semantic views
-question ─► LangGraph: resolve time + link entities (Python) ─► k SQL candidates (1 LLM step)
-         ─► execute read-only ─► repair failures (≤ 2 LLM steps) ─► vote on typed results
-         ─► answer | abstain (agreement < tau) | unanswerable ─► append to submission.jsonl
-```
+
+Colors: grey = inputs, green = knowledge about the data and the rules, yellow = understanding the
+question, purple = the agent's reasoning, orange = the language model, blue = the final answer.
 
 Built on LangGraph (inference) and LangChain deepagents (synthetic-data teacher, dev only).
 
