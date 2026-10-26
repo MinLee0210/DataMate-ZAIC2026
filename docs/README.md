@@ -13,6 +13,7 @@ docs/
 ├── MODELS.md             models used at inference + parameter budget
 ├── NOTES.md              decisions log (append newest at top)
 ├── EXPERIMENTS.md        runbook for gated experiments
+├── PLAN.md               next steps as handoff tasks (T1..T16) for another agent
 ├── SUGGESTIONS.md        backlog of later improvements (CA-API mapping, products, research)
 ├── analysis/             analysis artifacts
 │   └── <yyyy-mm-dd>/<topic>/...{md|txt|csv|png|...}
