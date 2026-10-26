@@ -220,7 +220,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # DataMate
-models/
+/models/
 data/*
 !data/README.md
 !data/.gitkeep
