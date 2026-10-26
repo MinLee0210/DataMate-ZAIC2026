@@ -1,4 +1,5 @@
 # data/
 
-Local datasets and files for experiments. Large or private data should not be committed.
-Database datasources (Postgres, Milvus) are configured in `.env`, not stored here.
+Local copy of the competition data, not committed. Point `DATA_DIR` here in `.env`.
+The expected layout is documented (and handled) in `src/data/layout.py`. Fix it there once the
+official data is downloaded. `data/synth/` holds teacher output from `scripts/datagen/`.

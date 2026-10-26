@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# DataMate
+models/
+data/*
+!data/README.md
+!data/.gitkeep
+result/

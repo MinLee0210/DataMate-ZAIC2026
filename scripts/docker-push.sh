@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Tag and push the image to the pre-defined destination.
-# Set IMAGE_REPO to the destination (e.g. ghcr.io/lakoreai/ai-app-project-template).
+# Set IMAGE_REPO to the destination (e.g. ghcr.io/<org>/datamate).
 # Env: IMAGE (local image name), TAG (latest), IMAGE_REPO (required).
 set -euo pipefail
 
-IMAGE="${IMAGE:-ai-app-project-template}"
+IMAGE="${IMAGE:-datamate}"
 TAG="${TAG:-latest}"
 IMAGE_REPO="${IMAGE_REPO:-}"
 

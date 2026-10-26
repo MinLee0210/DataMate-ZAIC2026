@@ -1,27 +1,23 @@
 # assets/
 
-Static files used by the app.
+Static files used by the agents. No prompt text lives in Python code.
 
 ```
 assets/
-├── prompt_templates/<agent>.md   the prompt of each agent
-└── skills/<name>/SKILL.md        skills: YAML frontmatter (name, description) + instructions
+├── prompt_templates/
+│   ├── sql_agent.md       system prompt of SQLAgent (followed by its skills)
+│   ├── sql_question.md    user prompt: README, schema, semantic views, time, entities, variant, question
+│   ├── sql_variants.md    the k approach hints, separated by a line `---` (diversity at temperature 0)
+│   ├── repair.md          user prompt after a failed query
+│   └── default.md         BaseAgent default
+├── skills/<name>/SKILL.md YAML frontmatter (name, description) + instructions
+└── semantic/*.sql         rulebook views and macros, applied to every business at ingest
 ```
 
-Each agent has its prompt in `prompt_templates/`: an agent sets `prompt_template = "<agent>"` (default
-`default`; `ChatAgent` uses `chat`) and `BaseAgent` loads it through `src/modules/agents/prompts.py`.
-A missing template raises `KeyError` when the agent is built. To add an agent prompt, create
-`prompt_templates/<agent>.md`.
+Placeholders in templates are `{{name}}`; single braces are left alone because SQL and JSON use them.
 
-Current skills: `summarize`, `answer-with-sources`.
-
-Skills belong to agents, not to a separate module. `BaseAgent` (`src/modules/agents/base.py`) takes a
-list of skill names, loads each `SKILL.md` through `src/modules/agents/skills.py`, and appends the bodies
-(frontmatter removed) to its prompt template as `system_prompt`. An unknown skill name raises `KeyError`
-when the agent is built.
-
-```python
-agent = ChatAgent(skills=["summarize"])
-```
-
-Add a skill by creating `skills/<name>/SKILL.md`, then list it in the agent that should use it.
+Skills: `answer-types`, `time-expressions`, `ranking-rules`, `business-metrics`, `unanswerable`.
+They must be generic across businesses. `BaseAgent` appends the skill bodies (frontmatter removed)
+to its prompt template. The same folders are read by the deepagents teacher in `scripts/datagen/`;
+the format is the Agent Skills format that deepagents uses. An unknown skill or template name
+raises `KeyError` when the agent is built.

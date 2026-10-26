@@ -9,3 +9,10 @@ def load_prompt_template(name: str, templates_dir: Path = PROMPT_TEMPLATES_DIR) 
     if not path.is_file() or path.resolve().parent != templates_dir.resolve():
         raise KeyError(name)
     return path.read_text().strip()
+
+
+def render(template: str, **values: str) -> str:
+    """Fill `{{name}}` placeholders. Single braces are left alone (SQL and JSON use them)."""
+    for name, value in values.items():
+        template = template.replace("{{" + name + "}}", value)
+    return template

@@ -7,7 +7,9 @@ Everything document-related lives in `docs/`. Nothing that is a document
 
 ```
 docs/
-├── RESEARCH.md           project question, scope, method
+├── PROJECT.md            competition spec
+├── RESEARCH.md           research question, hypotheses, method
+├── MODELS.md             models used at inference + parameter budget
 ├── NOTES.md              decisions log (append newest at top)
 ├── EXPERIMENTS.md        runbook for gated experiments
 ├── analysis/             analysis artifacts

@@ -7,7 +7,7 @@ class HealthModule(BaseModules):
     """Registry of health probes (datasources, LLM providers, external APIs, ...).
 
     A probe is a callable that raises if its target is unhealthy,
-    e.g. `module.register("postgres", postgres_source.ping)`.
+    e.g. `module.register("duckdb", source.ping)`.
     """
 
     def __init__(self) -> None:

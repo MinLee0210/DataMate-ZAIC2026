@@ -6,3 +6,6 @@ data
 docs
 notebooks
 tests
+app
+scripts/datagen
+scripts/devfree

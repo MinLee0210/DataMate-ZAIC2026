@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 
 class DataSource(ABC):
-    """A backing store (Postgres, Milvus, ...). Services receive one or more of these."""
+    """A backing store (one business's DuckDB file). Services receive one of these."""
 
     @abstractmethod
     def connect(self) -> None: ...

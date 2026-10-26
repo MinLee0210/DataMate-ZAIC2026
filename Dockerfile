@@ -1,24 +1,28 @@
 # syntax=docker/dockerfile:1
+# Competition image: local vLLM + DataMate batch inference, runs with --network none.
+# DRAFT: not built yet. Pin VLLM_IMAGE after the first GPU smoke run on RTX 5090 (CUDA >= 12.8).
+#   make docker-build && make rerun-check
+ARG VLLM_IMAGE=vllm/vllm-openai:v0.11.0
+FROM ${VLLM_IMAGE}
 
-FROM python:3.12-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+COPY --from=ghcr.io/astral-sh/uv:0.12.15 /uv /uvx /bin/
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
 
-# dependencies only: this layer is rebuilt just when pyproject.toml / uv.lock change
+# app dependencies in their own venv (vLLM stays in the base image's Python); rebuilt only when
+# pyproject.toml / uv.lock change
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=uv.lock,target=uv.lock \
-    uv sync --frozen --no-dev --extra datasources --no-install-project
+    uv sync --frozen --no-dev --no-install-project --python python3
 
-FROM python:3.12-slim
-WORKDIR /app
-ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
+# model weights, downloaded beforehand into ./models/target (declared in docs/MODELS.md)
+COPY models/target /models/target
 
-COPY --from=builder /app/.venv /app/.venv
-# code last: editing src/ does not invalidate the dependency layers
+# code last: editing src/ does not invalidate the layers above
 COPY src ./src
-COPY scripts/entrypoints.sh ./scripts/entrypoints.sh
+COPY scripts/infer.sh scripts/vllm.sh ./scripts/
 
-EXPOSE 8000
-CMD ["./scripts/entrypoints.sh"]
+ENV DATA_DIR=/data RESULT_DIR=/result WORK_DIR=/tmp/datamate MODEL_PATH=/models/target \
+    PYTHONUNBUFFERED=1
+ENTRYPOINT ["./scripts/infer.sh"]

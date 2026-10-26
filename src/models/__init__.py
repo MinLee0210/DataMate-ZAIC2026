@@ -1,3 +1,21 @@
-from src.models.chat import ChatRequest, ChatResponse
+from src.models.qa import (
+    VALUE_TYPES,
+    Answer,
+    AnswerType,
+    ColumnCard,
+    Question,
+    SchemaCard,
+    SubmissionLine,
+    TableCard,
+)
 
-__all__ = ["ChatRequest", "ChatResponse"]
+__all__ = [
+    "VALUE_TYPES",
+    "Answer",
+    "AnswerType",
+    "ColumnCard",
+    "Question",
+    "SchemaCard",
+    "SubmissionLine",
+    "TableCard",
+]

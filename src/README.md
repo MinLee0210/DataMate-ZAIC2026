@@ -1,42 +1,38 @@
 # src/
 
-The backend. `src/__init__.py` builds the FastAPI app (`create_app()`, exposed as `app`), mounts
-`routes.api_router`, and in its lifespan creates and connects the datasources, registers their health
-probes, and builds the chat service.
+The DataMate package. The competition runs `python -m src` (`__main__.py`, batch). `src/__init__.py`
+also builds a FastAPI app with `/health` and `/ask`, used for debugging and, later, by the demo UI
+in `app/`. Run it with `make run` (`APP_HOST`, `APP_PORT`, `APP_RELOAD` from `.env`).
 
 ```
 src/
-├── __init__.py      app factory + lifespan
-├── config.py        Settings (pydantic-settings, reads .env)
-├── routes/          API routers; each route calls a service
-├── services/        one folder per service (service.py + utils/); it calls shared src/modules
-├── models/          request/response schemas (pydantic)
-├── modules/         shared building blocks (BaseModules, LLM, agents + skills, HealthModule)
-├── data/            datasources (DataSource, PostgresSource, MilvusSource, registry)
-├── utils/           shared helpers (colored logger)
-└── assets/          static files: agent prompt_templates/ and skills/
+├── __main__.py      batch: questions → QAService → submission.jsonl (append + fsync) + trace
+├── config.py        Settings (pydantic-settings, reads .env); FINAL_MODE=1 needs a local LLM URL
+├── models/          Question, Answer, SubmissionLine, SchemaCard
+├── data/            DuckDBSource (read-only, guarded queries), layout.py (dataset paths)
+├── modules/         shared building blocks, no I/O policy of their own
+├── services/        ingest (package → DuckDB + context), qa (LangGraph pipeline)
+├── routes/          /health, /ask (debugging, demo UI)
+├── utils/           colored logger
+└── assets/          prompt_templates/, skills/, semantic/
 ```
 
 ## Flow
 
-`routes/*` -> `services/<name>/service.py` -> `modules/` (LLM, agents, ...) + `data/` datasources + `utils/`.
-A service does not define modules itself; it calls the shared ones in `src/modules/`.
+`__main__` / `routes` → `services/<name>/service.py` → `modules/` + `data/` + `utils/`.
+A service does not define modules; it composes the shared ones.
 
-## Adding a feature
+`services/qa/graph.py` is the per-question LangGraph:
+`prepare` (time ranges, entity links; no LLM) → `generate` (k prompt variants, 1 step) → `execute`
+(DuckDB) → `repair` on failures (≤ `max_repairs` steps) → `decide` (vote, tau).
 
-1. Schemas in `models/<name>.py` (export them in `models/__init__.py`).
-2. `services/<name>/service.py` with a service class that calls modules from `src/modules/`; service-specific helpers go in
-   `services/<name>/utils/`.
-3. `routes/<name>.py` with an `APIRouter` that calls the service; include it in `routes/__init__.py`.
-4. If the service needs a datasource, pass it in from `src/__init__.py`; to monitor a new source, register a
-   probe: `health.register("name", probe)`, where a probe raises when unhealthy.
-5. Add a test under `tests/`.
+## Rules that apply here (from CLAUDE.md)
 
-## Datasources
-
-`DataSource` has `connect()`, `ping()` and `close()`. `data/registry.py` builds the ones configured in
-the environment (none, one or both). A failed connection is logged and shows up as `degraded` in
-`/health`. The drivers are optional: `uv sync --extra datasources`.
+- Nothing in `src/` imports a third-party API client other than the OpenAI-compatible `LLM`, which
+  points at a local vLLM server in final mode.
+- No prompts in code: prompts are in `assets/prompt_templates/`, rulebook knowledge in `assets/skills/`.
+- Nothing keyed on a `business_id` or question `id`.
+- Any failure in a question is logged and becomes `abstain`.
 
 ## Logging
 

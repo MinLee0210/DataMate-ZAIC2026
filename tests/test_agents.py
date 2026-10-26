@@ -1,16 +1,16 @@
 import pytest
 
 from src.modules.agents.base import BaseAgent
-from src.modules.agents.chat import ChatAgent
-from src.modules.agents.prompts import load_prompt_template
+from src.modules.agents.prompts import load_prompt_template, render
 from src.modules.agents.skills import list_skills, load_skill
-from tests.test_chat import FakeLLM
+from src.modules.agents.sql_agent import DEFAULT_SKILLS, SQLAgent
+from tests.conftest import FakeLLM
 
 
 def test_list_and_load_skills():
-    assert {"summarize", "answer-with-sources"} <= set(list_skills())
-    body = load_skill("summarize")
-    assert body.startswith("# Summarize")
+    assert set(DEFAULT_SKILLS) <= set(list_skills())
+    body = load_skill("ranking-rules")
+    assert body.startswith("# Ranking rules")
     assert "name:" not in body
 
 
@@ -22,7 +22,6 @@ def test_unknown_skill(name):
 
 def test_agent_without_skills_uses_its_prompt_template():
     assert BaseAgent().system_prompt == load_prompt_template("default")
-    assert ChatAgent(llm=FakeLLM()).system_prompt == load_prompt_template("chat")
 
 
 def test_unknown_prompt_template():
@@ -30,15 +29,17 @@ def test_unknown_prompt_template():
         load_prompt_template("../skills/summarize/SKILL")
 
 
-def test_agent_system_prompt_includes_its_skills():
-    llm = FakeLLM()
-    agent = ChatAgent(llm=llm, skills=["summarize"])
-    agent.execute("text")
-    system = llm.messages[0]["content"]
-    assert system.startswith(load_prompt_template("chat"))
-    assert "# Summarize" in system
+def test_sql_agent_system_prompt_includes_its_skills():
+    agent = SQLAgent(llm=FakeLLM())
+    assert agent.system_prompt.startswith(load_prompt_template("sql_agent"))
+    assert "# Ranking rules" in agent.system_prompt
+    assert len(agent.variants) >= 3
 
 
 def test_agent_unknown_skill_fails_at_build():
     with pytest.raises(KeyError):
-        ChatAgent(llm=FakeLLM(), skills=["nope"])
+        SQLAgent(llm=FakeLLM(), skills=["nope"])
+
+
+def test_render_leaves_single_braces():
+    assert render('{"a": 1} {{x}}', x="y") == '{"a": 1} y'
