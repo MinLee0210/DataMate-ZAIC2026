@@ -165,6 +165,13 @@ Each task is one dev200 experiment with its own TOPIC, kept only if PA improves.
 | T16 | Final checks: `docs/MODELS.md` and README declare every model; `FINAL_MODE=1` refuses non-local URLs; no API client imported in `src/` | checklist in NOTES.md |
 | — | **16/11 23:59**: the user submits the solution (max 2 uploads, the last counts) | |
 
+## After the competition path — demo app
+
+| ID | Task | Notes |
+|---|---|---|
+| T17 | Demo UI in `app/` on top of `POST /ask` | after `src/` is done |
+| T18 | **Charts in the app** (planned feature, not scored): `/ask` returns a chart spec built from the winning result, with the chart type chosen from the answer type and result shape | see SUGGESTIONS.md S18; the batch path never draws charts |
+
 ## Prompt to give another agent
 
 > You are working on the DataMate repo (Zalo AI Challenge 2026). Read `CLAUDE.md`,

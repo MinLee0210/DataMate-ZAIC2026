@@ -164,10 +164,30 @@ Effort: S < 1 day, M 1–3 days, L > 3 days. "Measure" means the dev200 numbers 
 Suggested order: S1 → S6 + S5 → baseline eval → S7, S3, S10 → S8 → S14 → S9, S11 → S12 →
 S13, S17 → the rest.
 
+## 4b. Planned feature: charts in the demo app
+
+**S18. Charts, as CA-API does.** The challenge does not score charts and the batch path
+(`python -m src`) never makes them. The demo app (`app/`, on top of `POST /ask`) should show a
+chart next to the answer, as CA-API returns a `ChartMessage` beside text and data.
+
+Decided so far:
+- Scope: the app and `/ask` only. The submission line and the inference time are unchanged.
+- Input: the executed result the answer came from (the winning candidate's rows and columns), so
+  the chart shows the same numbers as the answer.
+- Output: a declarative chart spec (for example Vega-Lite, which CA-API also uses) that the UI
+  renders, never an image.
+- Chart type from the answer type and the result shape. A first version needs no LLM: list or
+  table with one measure → bar, by date or month → line, share of a total → bar with percents,
+  single number or string → no chart (show the value). An LLM step that picks or titles the chart
+  is optional, app-only, and must stay offline (local model).
+
+Not built yet. Start after `src/` is done (see docs/NOTES.md, "App settings, demo UI later").
+
 ## 5. Not recommended, and why
 
-- **Clarifying questions, charts, multi-turn state, A2A multi-agent.** These are CA features that
-  do not apply to a scored batch job, and they cost steps and variance.
+- **Clarifying questions, multi-turn state, A2A multi-agent.** These are CA features that do not
+  apply to a scored batch job, and they cost steps and variance. (Charts are planned for the demo
+  app, not for the competition: see S18.)
 - **Embedding-based value search or example retrieval.** It would use parameter budget that the
   14B model already takes (docs/MODELS.md). The masked-intent approach in S8 gets most of the
   benefit with BM25.

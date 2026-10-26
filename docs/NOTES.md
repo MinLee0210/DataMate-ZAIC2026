@@ -2,6 +2,13 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-26 - Planned feature: charts in the demo app
+- The demo app will draw a chart next to the answer, as Google's CA-API does. The challenge does
+  not ask for this; it is a product feature for the app's interface.
+- Scope: `app/` and `POST /ask` only. The batch path and `submission.jsonl` stay chart-free, so
+  inference time and determinism are unchanged.
+- Not built yet. Design notes are in SUGGESTIONS.md (S18) and the task is PLAN.md T18.
+
 ## 2026-10-26 - MAX_REPAIRS 2 → 5
 - The default `max_repairs` is now 5 (`MAX_REPAIRS` in `.env` overrides it). A question takes at
   most 1 + 5 = 6 LLM steps, which exceeds the "at most 4 LLM steps" workflow rule in CLAUDE.md.
