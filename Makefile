@@ -3,6 +3,7 @@
 SPLIT ?= train
 SUBSET ?= dev200
 TOPIC ?= eval
+WORKERS ?= 1
 IMAGE ?= datamate
 TAG ?= latest
 
@@ -19,10 +20,10 @@ ingest:
 	uv run python -m scripts.ingest --split $(SPLIT)
 
 eval:
-	uv run python -m scripts.eval --split train --subset $(SUBSET) --topic $(TOPIC)
+	uv run python -m scripts.eval --split train --subset $(SUBSET) --topic $(TOPIC) --workers $(WORKERS)
 
 eval-full:
-	uv run python -m scripts.eval --split train --subset all --topic $(TOPIC)-full
+	uv run python -m scripts.eval --split train --subset all --topic $(TOPIC)-full --workers $(WORKERS)
 
 vllm:
 	./scripts/vllm.sh

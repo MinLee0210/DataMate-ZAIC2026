@@ -57,6 +57,8 @@ def _sum(values: Iterable[Any]) -> int | None:
 
 def _llm_steps(trace: dict) -> int:
     """Graph LLM steps: one generate plus one per repair round."""
+    if "llm_steps" in trace:  # the CA pipeline counts its own steps
+        return int(trace["llm_steps"])
     if "repairs" not in trace and not _calls(trace):
         return 0
     return 1 + int(trace.get("repairs") or 0)

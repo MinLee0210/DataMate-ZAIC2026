@@ -25,10 +25,25 @@ class Answer(BaseModel):
     value: Any = None
 
 
+UNANSWERABLE_REASON = "Dữ liệu không có thông tin cần thiết để trả lời câu hỏi"
+
+
 class SubmissionLine(BaseModel):
     id: str
     type: AnswerType
     answer: Any = None
+
+    def record(self) -> dict:
+        """The JSONL record in the portal's format (Submission example, rulebook §9).
+
+        Value types: {"id", "type", "answer"}. unanswerable: {"id", "type", "reason"} with a
+        Vietnamese reason. abstain: {"id", "type"}. Neither of the last two has an "answer" key.
+        """
+        if self.type == "unanswerable":
+            return {"id": self.id, "type": self.type, "reason": UNANSWERABLE_REASON}
+        if self.type == "abstain":
+            return {"id": self.id, "type": self.type}
+        return {"id": self.id, "type": self.type, "answer": self.answer}
 
 
 class ColumnCard(BaseModel):

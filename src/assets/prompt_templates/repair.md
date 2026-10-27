@@ -14,6 +14,9 @@ Your previous query for this question failed. Fix it.
 ## Question
 {{question}}
 
+## Business analysis
+{{analysis}}
+
 ## Previous answer type
 {{answer_type}}
 

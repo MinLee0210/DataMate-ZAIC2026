@@ -3,8 +3,10 @@
     uv run python -m scripts.eval --subset dev200 --topic baseline          # run + score
     uv run python -m scripts.eval --pred result/submission.jsonl --topic x   # score only
 
-Writes docs/analysis/<yyyy-mm-dd>/<topic>/summary.md (+ scored.jsonl, metrics.json) and appends a
-row to docs/EXPERIMENTS.md. Never copy numbers by hand.
+Writes docs/analysis/<yyyy-mm-dd>/<topic>/summary.md (+ scored.jsonl, metrics.json), appends a
+row to docs/EXPERIMENTS.md and exports the run's submission to
+data/results/<yyyy-mm-dd>/<topic>/submission.jsonl in the rulebook §9 format. Never copy numbers by
+hand.
 """
 
 import argparse
@@ -20,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.evaluate import (  # noqa: E402
+    check_format,
     diagnostics,
     efficiency,
     read_submission,
@@ -27,6 +30,7 @@ from src.evaluate import (  # noqa: E402
     summarize,
     tau_curve,
 )
+from src.models import SubmissionLine  # noqa: E402
 
 TAU_GRID = [round(0.05 * i, 2) for i in range(21)]
 
@@ -121,6 +125,7 @@ def report(
     questions: dict[str, dict],
     topic: str,
     command: str,
+    model: str = "",
 ) -> Path:
     scored = []
     by_type: dict[str, list[int]] = defaultdict(list)
@@ -151,6 +156,8 @@ def report(
         "",
         f"Command: `{command}`",
         "",
+        f"Model: `{model or 'not recorded'}`",
+        "",
         f"**PA {total['pa']}** on {total['n']} questions: {total['correct']} correct, "
         f"{total['wrong']} wrong, {total['abstain']} abstain.",
         "",
@@ -170,19 +177,40 @@ def report(
         lines += efficiency_section(eff)
     (out / "summary.md").write_text("\n".join(lines))
     metrics = {"pa": total, "verdicts": dict(reasons), "diagnostics": diag, "efficiency": eff}
-    (out / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2))
+    (out / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2) + "\n")
 
     experiments = ROOT / "docs" / "EXPERIMENTS.md"
     rel = out.relative_to(ROOT / "docs")
     with experiments.open("a") as f:
         f.write(
-            f"| {date.today().isoformat()} | {topic} | `{command}` | PA {total['pa']} "
+            f"| {date.today().isoformat()} | {topic} ({model or '-'}) | `{command}` | "
+            f"PA {total['pa']} "
             f"({total['correct']}/{total['wrong']}/{total['abstain']}), "
             f"{eff['seconds_per_question'].get('mean', '-')} s/q, "
             f"{eff['tokens']['prompt_per_question'].get('mean', '-')} prompt tok/q, "
             f"[summary]({rel}/summary.md) |\n"
         )
     return out / "summary.md"
+
+
+def export_submission(pred_path: Path, topic: str) -> Path:
+    """Rewrite a submission in the rulebook §9 format under data/results/<date>/<topic>/.
+
+    Each readable line is re-serialized through SubmissionLine (unanswerable gets a string
+    `reason`); a line whose answer fails the type's format check raises, so a broken file is
+    never exported. Lines are sorted by id, so a threaded run exports the same file as a serial one.
+    """
+    out = ROOT / "data" / "results" / date.today().isoformat() / topic / "submission.jsonl"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    preds = read_submission(pred_path.read_text().splitlines())
+    lines = []
+    for pred in sorted(preds.values(), key=lambda p: p["id"]):
+        line = SubmissionLine(id=pred["id"], type=pred["type"], answer=pred.get("answer"))
+        if line.type != "abstain" and not check_format(line.type, line.answer):
+            raise ValueError(f"bad {line.type} format for {line.id}: {line.answer!r}")
+        lines.append(json.dumps(line.record(), ensure_ascii=False))
+    out.write_text("\n".join(lines) + "\n" if lines else "")
+    return out
 
 
 # ---------------------------------------------------------------- runner
@@ -206,6 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--split", default="train")
     parser.add_argument("--subset", default="dev200")
     parser.add_argument("--topic", default="eval")
+    parser.add_argument("--workers", type=int, default=settings.workers, help="question threads")
     parser.add_argument("--pred", type=Path, help="score this submission.jsonl instead of running")
     args = parser.parse_args(argv)
 
@@ -235,6 +264,8 @@ def main(argv: list[str] | None = None) -> int:
                 str(run_dir),
                 "--ids",
                 str(run_dir / "ids.txt"),
+                "--workers",
+                str(args.workers),
             ],
             check=True,
             cwd=ROOT,
@@ -242,7 +273,9 @@ def main(argv: list[str] | None = None) -> int:
         pred_path = run_dir / "submission.jsonl"
     traces = {t["id"]: t for t in _load_jsonl(trace_path)}
     preds = read_submission(pred_path.read_text().splitlines()) if pred_path.is_file() else {}
-    summary = report(preds, golds, traces, questions, args.topic, command)
+    summary = report(preds, golds, traces, questions, args.topic, command, settings.llm_model)
+    if pred_path.is_file():
+        print(f"submission exported to {export_submission(pred_path, args.topic)}")
     print(summary.read_text())
     return 0
 

@@ -8,13 +8,15 @@ import duckdb
 from src.config import settings
 from src.models import SchemaCard
 from src.modules.context import Entity, build_entity_dict, build_table_card
-from src.modules.ingest import TABLE_SUFFIXES, read_tables
+from src.modules.ingest import TABLE_SUFFIXES, merge_split_tables, read_tables
 from src.modules.semantic import apply_semantic_layer
 from src.utils import get_logger
 
 logger = get_logger(__name__)
 
 CALENDAR_TABLE = "lunar_calendar"
+# part of the cache key: bump it when ingest output changes, so old caches are rebuilt
+INGEST_VERSION = "3"
 
 
 @dataclass
@@ -29,7 +31,7 @@ class BusinessContext:
 
 
 def _fingerprint(paths: list[Path]) -> str:
-    digest = hashlib.sha256()
+    digest = hashlib.sha256(INGEST_VERSION.encode())
     for path in sorted(paths):
         digest.update(path.name.encode())
         digest.update(path.read_bytes())
@@ -70,7 +72,7 @@ class IngestService:
         )
         conn = duckdb.connect(str(db_path))
         try:
-            tables = [t for f in files for t in read_tables(f)]
+            tables = merge_split_tables([t for f in files for t in read_tables(f, infer=False)])
             if self.calendar:
                 for table in read_tables(self.calendar):
                     table.name = CALENDAR_TABLE

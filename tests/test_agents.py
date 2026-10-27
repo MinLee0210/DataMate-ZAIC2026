@@ -1,9 +1,8 @@
 import pytest
 
 from src.modules.agents.base import BaseAgent
-from src.modules.agents.prompts import load_prompt_template, render
-from src.modules.agents.skills import list_skills, load_skill
 from src.modules.agents.sql_agent import DEFAULT_SKILLS, SQLAgent
+from src.utils.assets import list_skills, load_prompt_template, load_skill, render
 from tests.conftest import FakeLLM
 
 
@@ -43,3 +42,11 @@ def test_agent_unknown_skill_fails_at_build():
 
 def test_render_leaves_single_braces():
     assert render('{"a": 1} {{x}}', x="y") == '{"a": 1} y'
+
+
+def test_rulebook_goes_last_in_system_prompt():
+    agent = SQLAgent(llm=FakeLLM(), rulebook="## 9. Đáp án\nKhách sộp nhất: từ 3 đơn trở lên")
+    assert agent.system_prompt.startswith(SQLAgent(llm=FakeLLM()).system_prompt)
+    assert agent.system_prompt.endswith("Khách sộp nhất: từ 3 đơn trở lên")
+    assert "{{rulebook}}" not in agent.system_prompt
+    assert SQLAgent(llm=FakeLLM()).rulebook == ""

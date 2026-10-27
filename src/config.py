@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     # '{"chat_template_kwargs": {"enable_thinking": false}}'
     llm_extra_body: str = ""
     seed: int = 2026
+    # "vote": k SQL candidates + vote (services/qa/graph.py).
+    # "ca": the reasoning loop of Google's Conversational Analytics API (services/qa/ca.py)
+    pipeline: str = "vote"
+    # vote pipeline: business analysis step before SQL generation (one LLM call per question)
+    analyze: bool = True
+    # JSON merged over LLM_EXTRA_BODY for the analysis call (vote) or every CA step, e.g. thinking:
+    # DeepSeek '{"thinking": {"type": "enabled"}}',
+    # vLLM Qwen3 '{"chat_template_kwargs": {"enable_thinking": true}}'
+    analyze_extra_body: str = ""
+    # thinking tokens count against max_tokens, so those calls get more room
+    analyze_max_tokens: int = 4096
 
     # FINAL_MODE=1: competition inference, only a local LLM endpoint is allowed
     final_mode: bool = False
@@ -48,6 +59,8 @@ class Settings(BaseSettings):
     max_repairs: int = 5
     sql_timeout_s: float = 20.0
     max_result_rows: int = 200
+    # question threads in `python -m src`; each has its own LLM client and DuckDB connections
+    workers: int = 1
     # stop answering (abstain) after this many seconds, leaving margin inside the 6 h limit
     time_budget_s: float = 4.5 * 3600
 
@@ -60,6 +73,10 @@ class Settings(BaseSettings):
     @property
     def extra_body(self) -> dict:
         return json.loads(self.llm_extra_body) if self.llm_extra_body else {}
+
+    @property
+    def analyze_body(self) -> dict:
+        return json.loads(self.analyze_extra_body) if self.analyze_extra_body else {}
 
 
 settings = Settings()

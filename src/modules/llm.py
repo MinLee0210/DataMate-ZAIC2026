@@ -1,24 +1,10 @@
 import time
-from dataclasses import asdict, dataclass
 
 from openai import OpenAI
 
 from src.config import settings
+from src.models import LLMUsage
 from src.modules.base import BaseModules
-
-
-@dataclass
-class LLMUsage:
-    """One chat call: tokens and timings, for the efficiency report (src/evaluate/metrics.py)."""
-
-    prompt_tokens: int | None = None  # None when the provider does not report usage
-    completion_tokens: int | None = None
-    ttft_s: float | None = None  # time to first token; None without streaming
-    latency_s: float = 0.0  # request sent -> last token
-    error: str | None = None
-
-    def to_dict(self) -> dict:
-        return asdict(self)
 
 
 class LLM(BaseModules):
@@ -56,17 +42,25 @@ class LLM(BaseModules):
         usage, self.usage = self.usage, []
         return usage
 
-    def complete(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        seed: int | None = None,
+        extra_body: dict | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """`extra_body` is merged over LLM_EXTRA_BODY for this call (e.g. thinking for one step)."""
         record = LLMUsage()
         started = time.perf_counter()
         try:
+            body = {**settings.extra_body, **(extra_body or {})}
             request = {
                 "model": self.model,
                 "messages": messages,
                 "temperature": settings.llm_temperature,
-                "max_tokens": settings.llm_max_tokens,
+                "max_tokens": max_tokens or settings.llm_max_tokens,
                 "seed": settings.seed if seed is None else seed,
-                "extra_body": settings.extra_body or None,
+                "extra_body": body or None,
             }
             if settings.llm_stream:
                 return self._stream(request, record, started)

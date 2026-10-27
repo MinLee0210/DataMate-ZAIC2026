@@ -1,3 +1,4 @@
+from src.models.llm import LLMUsage
 from src.models.qa import (
     VALUE_TYPES,
     Answer,
@@ -14,6 +15,7 @@ __all__ = [
     "Answer",
     "AnswerType",
     "ColumnCard",
+    "LLMUsage",
     "Question",
     "SchemaCard",
     "SubmissionLine",

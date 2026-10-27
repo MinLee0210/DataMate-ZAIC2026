@@ -8,6 +8,7 @@ from src.models import Answer, Question
 from src.modules.agents.sql_agent import SQLAgent
 from src.modules.context import render_schema_card
 from src.services.ingest import BusinessContext, IngestService
+from src.services.qa.ca import CAPipeline
 from src.services.qa.graph import build_qa_graph
 from src.utils import get_logger
 from src.utils.timeparse import LunarCalendar
@@ -26,10 +27,12 @@ class QAService:
         ingest: IngestService,
         package_dir: Callable[[str], Path],
         agent: SQLAgent | None = None,
+        rulebook: Path | None = None,
     ) -> None:
+        """`rulebook` is the split's rulebook.md; it goes into the agent's system prompt."""
         self.ingest = ingest
         self.package_dir = package_dir
-        self.agent = agent or SQLAgent()
+        self.agent = agent or SQLAgent(rulebook=rulebook.read_text() if rulebook else "")
         self._sources: dict[str, DuckDBSource] = {}
         self._schemas: dict[str, str] = {}
         lunar = LunarCalendar.from_csv(ingest.calendar) if ingest.calendar else None
@@ -43,6 +46,24 @@ class QAService:
             sql_timeout_s=settings.sql_timeout_s,
             max_rows=settings.max_result_rows,
             lunar=lunar,
+            analyze=settings.analyze,
+            analyze_body=settings.analyze_body,
+            analyze_max_tokens=settings.analyze_max_tokens,
+        )
+
+        self.ca = (
+            CAPipeline(
+                self.agent,
+                seed=settings.seed,
+                schema_text=self._schema_text,
+                sql_timeout_s=settings.sql_timeout_s,
+                max_rows=settings.max_result_rows,
+                lunar=lunar,
+                extra_body=settings.analyze_body,
+                max_tokens=settings.analyze_max_tokens,
+            )
+            if settings.pipeline == "ca"
+            else None
         )
 
     def _schema_text(self, business: BusinessContext) -> str:
@@ -70,6 +91,12 @@ class QAService:
                 question.business_id, self.package_dir(question.business_id)
             )
             trace["ingest_s"] = round(time.perf_counter() - started, 4)
+            if self.ca is not None:
+                answer, ca_trace = self.ca.run(
+                    question.question, question.as_of_date, business, self._source(business)
+                )
+                trace.update(ca_trace, llm=[u.to_dict() for u in self.agent.llm.pop_usage()])
+                return answer, trace
             state = self.graph.invoke(
                 {
                     "question": question.question,
@@ -92,6 +119,7 @@ class QAService:
             top=decision.top.model_dump() if decision.top else None,
             votes=decision.votes,
             repairs=state["repairs"],
+            analysis=state["context"].get("analysis"),
             candidates=[
                 {"type": c.answer_type, "value": c.value, "sql": c.sql, "error": c.error}
                 for c in state["candidates"]

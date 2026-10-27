@@ -1,11 +1,12 @@
 """The per-question LangGraph: a fixed, bounded pipeline (not an open agent loop).
 
-    prepare ─► generate ─► execute ─┬─► decide ─► END
-                              ▲     │ failed candidates and repairs left
-                              └─ repair ◄┘
+    prepare ─► analyze ─► generate ─► execute ─┬─► decide ─► END
+                                         ▲     │ failed candidates and repairs left
+                                         └─ repair ◄┘
 
-LLM calls: generate (1 step, k prompt variants) + repair (<= max_repairs steps). With the default
-max_repairs = 5 that is up to 6 LLM steps; repairs run only while some candidate has failed.
+LLM calls: analyze (1 step, optional: a business analysis every candidate reads) + generate
+(1 step, k prompt variants) + repair (<= max_repairs steps). Repairs run only while some candidate
+has failed.
 
 Each node adds its wall time to `timings` (seconds per node name, summed over repeats).
 """
@@ -58,6 +59,28 @@ class QAState(TypedDict, total=False):
     timings: Annotated[dict[str, float], _sum_timings]
 
 
+def build_context(
+    question: str,
+    as_of_date: date,
+    business: BusinessContext,
+    schema_text: Callable[[BusinessContext], str],
+    lunar: LunarCalendar | None = None,
+) -> dict[str, str]:
+    """Prompt sections for one question: README, schema card, semantic views, resolved time,
+    entity links. Deterministic, no LLM; shared by the vote and the CA pipelines."""
+    ranges = resolve(question, as_of_date, lunar)
+    matches = link_entities(question, business.entities)
+    return {
+        "readme": business.card.readme[:3000] or "(no README)",
+        "schema": schema_text(business),
+        "semantic": ", ".join(business.semantic) or "(none)",
+        "time": render_time_ranges(ranges, as_of_date),
+        "entities": render_entity_matches(matches),
+        "question": question,
+        "analysis": "(none)",
+    }
+
+
 def build_qa_graph(
     agent: SQLAgent,
     *,
@@ -69,22 +92,23 @@ def build_qa_graph(
     sql_timeout_s: float,
     max_rows: int,
     lunar: LunarCalendar | None = None,
+    analyze: bool = False,
+    analyze_body: dict | None = None,
+    analyze_max_tokens: int | None = None,
 ):
     """Compile the graph. `schema_text(business)` returns the rendered schema card (cached)."""
 
     def prepare(state: QAState) -> dict:
-        business = state["business"]
-        ranges = resolve(state["question"], state["as_of_date"], lunar)
-        matches = link_entities(state["question"], business.entities)
-        context = {
-            "readme": business.card.readme[:3000] or "(no README)",
-            "schema": schema_text(business),
-            "semantic": ", ".join(business.semantic) or "(none)",
-            "time": render_time_ranges(ranges, state["as_of_date"]),
-            "entities": render_entity_matches(matches),
-            "question": state["question"],
-        }
+        context = build_context(
+            state["question"], state["as_of_date"], state["business"], schema_text, lunar
+        )
         return {"context": context, "repairs": 0}
+
+    def analyze_node(state: QAState) -> dict:
+        analysis = agent.analyze(
+            state["context"], seed=seed - 1, extra_body=analyze_body, max_tokens=analyze_max_tokens
+        )
+        return {"context": {**state["context"], "analysis": analysis or "(none)"}}
 
     def generate(state: QAState) -> dict:
         plans: list[SQLPlan | None] = []
@@ -140,12 +164,17 @@ def build_qa_graph(
 
     graph = StateGraph(QAState)
     graph.add_node("prepare", _timed("prepare", prepare))
+    graph.add_node("analyze", _timed("analyze", analyze_node))
     graph.add_node("generate", _timed("generate", generate))
     graph.add_node("execute", _timed("execute", execute))
     graph.add_node("repair", _timed("repair", repair))
     graph.add_node("decide", _timed("decide", decide_node))
     graph.add_edge(START, "prepare")
-    graph.add_edge("prepare", "generate")
+    if analyze:
+        graph.add_edge("prepare", "analyze")
+        graph.add_edge("analyze", "generate")
+    else:
+        graph.add_edge("prepare", "generate")
     graph.add_edge("generate", "execute")
     graph.add_conditional_edges("execute", needs_repair, ["repair", "decide"])
     graph.add_edge("repair", "execute")

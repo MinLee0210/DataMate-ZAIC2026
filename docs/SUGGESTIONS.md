@@ -164,6 +164,22 @@ Effort: S < 1 day, M 1–3 days, L > 3 days. "Measure" means the dev200 numbers 
 Suggested order: S1 → S6 + S5 → baseline eval → S7, S3, S10 → S8 → S14 → S9, S11 → S12 →
 S13, S17 → the rest.
 
+## 4a. Additions 2026-10-27 (S19–S28)
+
+From the [second research round](reports/2026-10-27/deep-research/report.md), §7 there has the
+full table. In short:
+- **S19** question-shape library with a deterministic compiler: 81% of train questions have a
+  near-identical shape in another business.
+- **S20** model bake-off v2: Qwen3.5-9B, Ministral-3-14B, Gemma-4-12B, Arctic-R1-14B.
+- **S21** a small CSC merge reviser if the target is ≤ 10B.
+- **S22** SFT / GRPO with the official scorer as reward.
+- **S23** deterministic premise checks for unanswerable questions.
+- **S24** repair messy cells at ingest instead of annotating them.
+- **S25** an abbreviation lexicon mined from train questions.
+- **S26** adaptive thinking on low-agreement questions only.
+- **S27** grouped-CV tau with confidence intervals.
+- **S28** test fewer candidates.
+
 ## 4b. Planned feature: charts in the demo app
 
 **S18. Charts, as CA-API does.** The challenge does not score charts and the batch path

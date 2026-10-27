@@ -1,6 +1,5 @@
-from src.modules.agents.prompts import load_prompt_template
-from src.modules.agents.skills import load_skill
 from src.modules.base import BaseModules
+from src.utils.assets import load_prompt_template, load_skill
 
 
 class BaseAgent(BaseModules):

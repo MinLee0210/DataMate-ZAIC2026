@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 
 from src.config import settings
-from src.data.layout import business_dir, calendar_file, split_dir
+from src.data.layout import business_dir, calendar_file, rulebook_file, split_dir
 from src.models import Question
 from src.services.ingest import IngestService
 from src.services.qa import QAService
@@ -15,6 +15,7 @@ def _service(request: Request) -> QAService:
         request.app.state.qa = QAService(
             IngestService(settings.work_dir, calendar=calendar_file(root)),
             package_dir=lambda business_id: business_dir(root, business_id),
+            rulebook=rulebook_file(root),
         )
     return request.app.state.qa
 

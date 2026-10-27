@@ -12,6 +12,11 @@ _EN_THOUSANDS = re.compile(r"^-?\d{1,3}(,\d{3})+(\.\d+)?$")  # 1,234,567.5
 _DECIMAL_COMMA = re.compile(r"^-?\d+,\d+$")  # 12,5
 _PLAIN = re.compile(r"^-?\d+(\.\d+)?$")
 _CURRENCY = re.compile(r"(vnđ|vnd|đồng|đ|\$|usd)", re.IGNORECASE)
+_VND = re.compile(r"(vnđ|vnd|đồng|đ)", re.IGNORECASE)
+_DOT_THOUSANDS = re.compile(r"^-?\d{1,3}(\.\d{3})+$")  # 50.000: thousands when the value is VND
+# shorthand money: 25k, 1.5tr, 2 triệu, 30 nghìn
+_SCALE = re.compile(r"^(-?\d+(?:[.,]\d+)?)(k|nghìn|ngàn|nghin|ngan|tr|triệu|trieu)$", re.IGNORECASE)
+_SCALES = {"k": 1e3, "nghìn": 1e3, "ngàn": 1e3, "nghin": 1e3, "ngan": 1e3}
 _DATE_LIKE = re.compile(r"^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}( \d{1,2}:\d{2}(:\d{2})?)?$")
 _ISO_DATE = re.compile(r"^\d{4}-\d{1,2}-\d{1,2}")
 
@@ -77,6 +82,47 @@ def frame_from_raw(raw: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     return body, originals
 
 
+_ID_LIKE = re.compile(r"(^|_)(ma|so|id|code|no|stt)(_|$)")
+
+
+def fill_grouped_rows(frame: pd.DataFrame) -> pd.DataFrame:
+    """Fill the blank parent cells of a grouped export (one order header, several line rows).
+
+    Some exports write the order's code, date, status and customer on the first line of an
+    order only; the next lines of that order leave them blank. The columns blank on exactly the
+    same rows form the parent group. It is filled down only when it holds an id-like column
+    and a date column, so a field that is legitimately empty (a walk-in customer with no code)
+    is left alone.
+    """
+    if len(frame) < 2:
+        return frame
+    blank = frame.isna() | frame.astype(str).apply(lambda c: c.str.strip().isin(["", "nan"]))
+    masks: dict[tuple, list[str]] = {}
+    for col in frame.columns:
+        mask = blank[col]
+        if 0.05 <= mask.mean() <= 0.95 and not mask.iloc[0]:
+            masks.setdefault(tuple(mask.tolist()), []).append(col)
+    for mask, cols in masks.items():
+        if len(cols) < 2 or not any(_ID_LIKE.search(c) for c in cols):
+            continue
+        dated = [
+            c
+            for c in cols
+            if frame[c][~pd.Series(mask, index=frame.index)]
+            .astype(str)
+            .str.strip()
+            .str.match(_DATE_LIKE)
+            .mean()
+            >= PARSE_THRESHOLD
+            or pd.api.types.is_datetime64_any_dtype(frame[c])
+        ]
+        if not dated:
+            continue
+        frame = frame.copy()
+        frame[cols] = frame[cols].mask(blank[cols]).ffill()
+    return frame
+
+
 def number_locale(values: pd.Series) -> str | None:
     """'vi' (1.234.567,5) or 'en' (1,234,567.5) when the column's unambiguous values agree.
 
@@ -100,10 +146,18 @@ def parse_number(value: object, locale: str | None = None) -> float | None:
         return None
     if isinstance(value, int | float):
         return float(value)
-    text = _CURRENCY.sub("", str(value)).strip().replace(" ", "").replace(" ", "")
+    raw = str(value)
+    text = _CURRENCY.sub("", raw).strip().replace(" ", "").replace(" ", "")
     percent = text.endswith("%")
     text = text.rstrip("%")
-    if locale == "vi" and _VI_THOUSANDS.match(text):
+    scaled = _SCALE.match(text)
+    if scaled:
+        unit = scaled.group(2).lower()
+        return float(scaled.group(1).replace(",", ".")) * _SCALES.get(unit, 1e6)
+    if _VND.search(raw) and _DOT_THOUSANDS.match(text):
+        # VND has no decimals, so 50.000đ is fifty thousand
+        number = float(text.replace(".", ""))
+    elif locale == "vi" and _VI_THOUSANDS.match(text):
         number = float(text.replace(".", "").replace(",", "."))
     elif _PLAIN.match(text):
         number = float(text)

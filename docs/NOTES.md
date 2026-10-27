@@ -2,6 +2,89 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-27 - Ingest fixes from error analysis; messy-data skill; CA with thinking
+- Four ingest errors made tables wrong (details and affected businesses:
+  [notes/2026-10-27/data-errors/notes.md](notes/2026-10-27/data-errors/notes.md)): dot thousands
+  read as decimals, money shorthand (`25k`, `1,5tr`) left as text, tables split by month or part,
+  grouped exports with blank parent cells. All four are fixed in ingest, deterministically.
+  `INGEST_VERSION` (now 3) is part of the cache key.
+- The same knowledge is a skill (`assets/skills/messy-data`): what ingest cleaned, and how to
+  check and fix the rest in SQL or pandas, for cases ingest does not catch.
+- CA pipeline with thinking on every step (old ingest): PA 0.55 (122/12/66), 23 s/question. Only
+  12 wrong out of 134 answered (91 %): with thinking, the last THOUGHT abstains when unsure.
+- `python_exec.py` moved to `src/modules/`.
+
+## 2026-10-27 - CA pipeline: the reasoning loop of Google's Conversational Analytics API
+- New `PIPELINE=ca` (`src/services/qa/ca.py`), built on the CA-API message types (REST reference,
+  `Message`): `SchemaMessage` → `TextMessage THOUGHT` → `PROGRESS` (sample field values) →
+  `DataMessage` (named query → SQL → named `DataResult`) → `THOUGHT` on the results →
+  `AnalysisMessage` (Python over named results, `dataResultNames`) or one more `DataMessage` →
+  `FINAL_RESPONSE`. Errors are recoverable and shown to the next THOUGHT, as in CA-API.
+  Reference trace: a CA-API response stream on Looker data (user's work file, not copied here).
+- Bounded for the competition: at most 4 LLM steps (THOUGHT 1 schema, THOUGHT 2 queries,
+  THOUGHT 3 results, THOUGHT 4 only after an analysis or extra query). PROGRESS is deterministic
+  (`modules/context/sampling.py`): distinct counts, top values, min/max, and the number of rows
+  after the as-of date. The final value is formatted in code from the named result.
+- Differences from CA-API: no charts, no natural-language answer, no clarifying questions, and the
+  last THOUGHT may abstain (CA-API has no abstain; PA punishes a wrong answer).
+- Python analysis runs in `src/modules/python_exec.py`: AST check (no imports, dunder or private
+  names, file or reflection builtins), `results`, `pd` and a read-only `query()`, timeout.
+- The vote pipeline stays as `PIPELINE=vote` (default until the CA run is measured).
+- Why: user request, to follow CA-API instead of a self-designed pipeline. The vote pipeline went
+  straight from question to SQL; the intent step of CA-API's QueryData had been trimmed.
+- Same day, vote pipeline with an analysis step shared by the k candidates (`ANALYZE=true`):
+  PA 0.335 vs 0.35 without it. The candidates agree more (9 abstain instead of 36), so wrong
+  answers rose from 47 to 62. A shared analysis removes the diversity the vote relies on.
+  With thinking on for that analysis call only (`ANALYZE_EXTRA_BODY={"thinking": {"type":
+  "enabled"}}`): PA 0.52 (143/39/18), at 15.3 s/question instead of 5.8. Thinking is the gain,
+  not the extra step. The 6 h budget on the target GPU must be checked before keeping it.
+- Code layout: `LLMUsage` moved to `src/models/llm.py`; prompt and skill file IO
+  (`load_prompt_template`, `render`, `list_skills`, `load_skill`) moved from `modules/agents/` to
+  `src/utils/assets.py` (file IO only, no agent logic).
+
+## 2026-10-27 - Split rulebook in the system prompt; threaded batch runner
+- The split's `rulebook.md` (`/data/rulebook.md` at inference) is now appended to the SQL agent's
+  system prompt (`assets/prompt_templates/rulebook.md`, `SQLAgent(rulebook=...)`). Before this, no
+  code passed the rulebook to the model, and `business-metrics` was still a TODO.
+- Why: public_test scored PA -0.169 (about 211 right, 380 wrong). Its rulebook has 3 shop types
+  that are not in train (mother & baby, motorbike repair, phone shop) and many "most/best"
+  definitions (khách sộp nhất, giờ cao điểm, nhà cung cấp chính, ...). Without them the k
+  candidates agree on the same wrong definition, so voting cannot catch it. Reading the rulebook
+  at inference is allowed: it is part of the input.
+- Cost: about 22.6k characters, so about 26k prompt tokens per call instead of about 13k. It sits
+  at the end of the system prompt, so the shared prefix stays cacheable (DeepSeek, vLLM prefix
+  cache). To check on the pod: Qwen3-14B has a 32k native context (about 40k with its config), so
+  rulebook + schema + question must fit. If they do not, keep the general sections plus the
+  business's shop-type section.
+- `python -m src --workers N` (`WORKERS`, `make eval WORKERS=8`) runs questions on N threads. Every
+  business is ingested first, one at a time. Each thread has its own QAService (LLM client, usage
+  records, DuckDB connections). Writes are locked and fsynced per line. With N > 1 the line order
+  follows decision order, not the questions file; the score is by id, and answers do not depend
+  on N (temperature 0, fixed seeds per candidate).
+
+## 2026-10-27 - Exception: public_test run on the DeepSeek API
+- The user asked for a public_test submission before the GPU pod is ready, so public_test (1,000
+  questions) was run once through the hosted DeepSeek API (`deepseek-flash`). This breaks hard rule 3
+  in CLAUDE.md ("never run third-party APIs on public_test") by the user's explicit decision. It
+  sends the public_test questions and data excerpts to a third party.
+- Nothing from this run is used for tuning, training or few-shot examples. The score is a
+  reference for the pipeline only and does not reflect the final ≤15B offline model.
+- Why: the first upload was the train dev200 file by mistake and scored 0.0000, because none of its
+  ids are in public_test.
+
+## 2026-10-27 - Submission exports in data/results/<date>/<topic>/
+- `make eval` now also writes the run's submission to
+  `data/results/<yyyy-mm-dd>/<topic>/submission.jsonl`, the same date/topic layout as
+  `docs/analysis/`. Each line is re-serialized and its answer is format-checked with the scorer's
+  `check_format`. A bad line stops the export, so a broken file is never written.
+- Lines follow the portal's Submission example (challenge.zalo.ai/portal/datamate, read through its
+  public `config-detail` API on 2026-10-27): value types are `{"id", "type", "answer"}`,
+  unanswerable is `{"id", "type": "unanswerable", "reason": "<Vietnamese text>"}` and abstain is
+  `{"id", "type": "abstain"}`. Neither of the last two has an `answer` key
+  (`SubmissionLine.record()`). The portal accepts only `.jsonl` files of at most 5 MB.
+- Why: user request, so that every run leaves a file in the challenge format that can be uploaded or
+  compared directly.
+
 ## 2026-10-26 - Planned feature: charts in the demo app
 - The demo app will draw a chart next to the answer, as Google's CA-API does. The challenge does
   not ask for this; it is a product feature for the app's interface.

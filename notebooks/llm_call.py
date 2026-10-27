@@ -12,7 +12,14 @@ import argparse
 import json
 
 from src.config import settings
-from src.data.layout import business_dir, calendar_file, load_gold, load_questions, split_dir
+from src.data.layout import (
+    business_dir,
+    calendar_file,
+    load_gold,
+    load_questions,
+    rulebook_file,
+    split_dir,
+)
 from src.models import Question
 from src.modules.llm import LLM
 from src.services.ingest import IngestService
@@ -33,6 +40,7 @@ def qa_service() -> QAService:
     return QAService(
         IngestService(settings.work_dir, calendar=calendar_file(root)),
         package_dir=lambda business_id: business_dir(root, business_id),
+        rulebook=rulebook_file(root),
     )
 
 

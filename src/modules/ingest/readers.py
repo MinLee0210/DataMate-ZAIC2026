@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -5,7 +6,7 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
-from src.modules.ingest.clean import frame_from_raw, infer_types, to_identifier
+from src.modules.ingest.clean import fill_grouped_rows, frame_from_raw, infer_types, to_identifier
 from src.utils import get_logger
 
 logger = get_logger(__name__)
@@ -77,8 +78,11 @@ def _read_sqlite(path: Path) -> Iterator[tuple[str, pd.DataFrame]]:
         conn.close()
 
 
-def read_tables(path: Path) -> list[Table]:
-    """Read one data file into cleaned tables (one per CSV, sheet or SQLite table)."""
+def read_tables(path: Path, infer: bool = True) -> list[Table]:
+    """Read one data file into cleaned tables (one per CSV, sheet or SQLite table).
+
+    With `infer=False` the cells stay as read; `merge_split_tables` then infers types after
+    merging, so one column gets one type across all its sheets."""
     suffix = path.suffix.lower()
     stem = to_identifier(path.stem)
     tables: list[Table] = []
@@ -103,6 +107,48 @@ def read_tables(path: Path) -> list[Table]:
         if table.frame.empty:
             logger.warning("skipping empty table %s", table.source)
             continue
-        table.frame = infer_types(table.frame)
+        table.frame = fill_grouped_rows(table.frame)
+        if infer:
+            table.frame = infer_types(table.frame)
         out.append(table)
+    return out
+
+
+SOURCE_COLUMN = "nguon"
+_SPLIT_SUFFIX = re.compile(r"(_\d+)+$")
+
+
+def _base_name(name: str) -> str:
+    """'donhang_chitiet_1__t01_2025' -> 'donhang_chitiet': sheet and numeric file suffixes off."""
+    return _SPLIT_SUFFIX.sub("", name.split("__", 1)[0]) or name
+
+
+def merge_split_tables(tables: list[Table]) -> list[Table]:
+    """Merge tables split by month, period or part (one sheet per month, File_1 / File_2, ...).
+
+    Tables with the same base name and the same columns become one table named after the base,
+    with a `nguon` column holding each row's file and sheet. Types are inferred after merging.
+    """
+    groups: dict[tuple[str, tuple[str, ...]], list[Table]] = {}
+    for table in tables:
+        key = (_base_name(table.name), tuple(table.frame.columns))
+        groups.setdefault(key, []).append(table)
+    out: list[Table] = []
+    for (base, _), group in groups.items():
+        if len(group) == 1:
+            table = group[0]
+            table.frame = infer_types(table.frame)
+            out.append(table)
+            continue
+        frame = pd.concat(
+            [t.frame.assign(**{SOURCE_COLUMN: t.source}) for t in group], ignore_index=True
+        )
+        merged = Table(
+            base,
+            "; ".join(t.source for t in group),
+            infer_types(frame),
+            [*group[0].originals, "Nguồn (file#sheet)"],
+        )
+        logger.info("merged %d split tables into %s", len(group), base)
+        out.append(merged)
     return out

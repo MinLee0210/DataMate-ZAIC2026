@@ -4,4 +4,5 @@ Local copy of the competition data, not committed. Point `DATA_DIR` here in `.en
 The expected layout is documented (and handled) in `src/data/layout.py`. Fix it there once the
 official data is downloaded. `data/synth/` holds teacher output from `scripts/datagen/`.
 
-Results for each submissions stored at data/results
+Results for each submission are stored at `data/results/<yyyy-mm-dd>/<topic>/submission.jsonl`
+(written by `make eval`, rulebook §9 format).

@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from scripts.eval import subset_ids
+import scripts.eval
+from scripts.eval import export_submission, subset_ids
 from src.evaluate import (
     check_format,
     judge,
@@ -14,6 +15,7 @@ from src.evaluate import (
     summarize,
     tau_curve,
 )
+from src.models import SubmissionLine
 
 TABLE = {"columns": ["khach_hang", "so_tien_no"], "rows": [["Chị Lan", 3200000], ["Anh Ba", 500]]}
 
@@ -158,6 +160,19 @@ def test_parse_line(raw, readable):
     assert (parse_line(raw) is not None) == readable
 
 
+def test_submission_record_matches_portal_format():
+    assert SubmissionLine(id="q1", type="unanswerable").record() == {
+        "id": "q1",
+        "type": "unanswerable",
+        "reason": "Dữ liệu không có thông tin cần thiết để trả lời câu hỏi",
+    }
+    assert SubmissionLine(id="q1", type="abstain").record() == {"id": "q1", "type": "abstain"}
+    record = SubmissionLine(id="q1", type="number", answer=48250000).record()
+    assert record == {"id": "q1", "type": "number", "answer": 48250000}
+    for r in (SubmissionLine(id="q1", type=t).record() for t in ("unanswerable", "abstain")):
+        assert parse_line(json.dumps(r, ensure_ascii=False)) is not None
+
+
 def test_read_submission_first_line_wins_and_skips_garbage():
     lines = [
         json.dumps({"id": "a", "type": "number", "answer": 1}),
@@ -201,3 +216,24 @@ def test_tau_curve():
     assert curve[0.0] == 0.0  # +1 - 1
     assert curve[0.6] == 0.5  # b abstains
     assert curve[1.0] == 0.5
+
+
+def test_export_submission(tmp_path, monkeypatch):
+    monkeypatch.setattr(scripts.eval, "ROOT", tmp_path)
+    pred = tmp_path / "pred.jsonl"
+    rows = [
+        {"id": "c", "type": "abstain", "answer": None},
+        {"id": "a", "type": "number", "answer": 3},
+        {"id": "b", "type": "unanswerable", "answer": None},
+    ]
+    pred.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    out = export_submission(pred, "topic")
+    assert out.parent.parent.parent == tmp_path / "data" / "results"
+    lines = [json.loads(line) for line in out.read_text().splitlines()]
+    assert [line["id"] for line in lines] == ["a", "b", "c"]
+    assert isinstance(lines[1]["reason"], str)
+    assert "answer" not in lines[1] and lines[2] == {"id": "c", "type": "abstain"}
+
+    pred.write_text(json.dumps({"id": "a", "type": "number", "answer": "3"}) + "\n")
+    with pytest.raises(ValueError):
+        export_submission(pred, "topic")

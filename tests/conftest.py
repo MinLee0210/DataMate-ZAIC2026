@@ -5,7 +5,8 @@ from fastapi.testclient import TestClient
 
 import src
 from scripts.devfree.toy import write_toy_split
-from src.modules.llm import LLMUsage
+from src.config import settings
+from src.models import LLMUsage
 
 
 class FakeLLM:
@@ -22,7 +23,7 @@ class FakeLLM:
         usage, self.usage = self.usage, []
         return usage
 
-    def complete(self, messages, seed=None):
+    def complete(self, messages, seed=None, extra_body=None, max_tokens=None):
         if self.error:
             self.usage.append(LLMUsage(latency_s=0.01, error=repr(self.error)))
             raise self.error
@@ -46,6 +47,12 @@ class FakeLLM:
 
 def plan(answer_type, sql):
     return json.dumps({"answer_type": answer_type, "sql": sql, "reason": "test"})
+
+
+@pytest.fixture(autouse=True)
+def no_analysis_step(monkeypatch):
+    """Scripted replies in most tests are SQL plans only; tests of the analysis step turn it on."""
+    monkeypatch.setattr(settings, "analyze", False)
 
 
 @pytest.fixture

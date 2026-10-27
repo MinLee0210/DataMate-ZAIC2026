@@ -126,7 +126,7 @@ def test_batch_writes_one_line_per_question(toy_split, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "work_dir", tmp_path / "work")
     monkeypatch.setattr(
         "src.__main__.QAService",
-        lambda ingest, package_dir: QAService(
+        lambda ingest, package_dir, **kwargs: QAService(
             ingest, package_dir, agent=SQLAgent(llm=FakeLLM(lambda p: plan("number", "SELECT 3")))
         ),
     )
@@ -143,3 +143,48 @@ def test_final_mode_requires_local_llm():
     Settings(final_mode=True, llm_base_url="http://127.0.0.1:8001/v1")
     with pytest.raises(ValueError, match="local"):
         Settings(final_mode=True, llm_base_url="https://openrouter.ai/api/v1")
+
+
+def test_batch_with_workers_writes_each_question_once(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "work_dir", tmp_path / "work")
+    monkeypatch.setattr(
+        "src.__main__.QAService",
+        lambda ingest, package_dir, **kwargs: QAService(
+            ingest, package_dir, agent=SQLAgent(llm=FakeLLM(lambda p: plan("number", "SELECT 3")))
+        ),
+    )
+    out = tmp_path / "result"
+    argv = ["--data", str(toy_split.parent), "--split", "train", "--out", str(out)]
+    assert main([*argv, "--workers", "4"]) == 0
+    lines = [json.loads(line) for line in (out / "submission.jsonl").read_text().splitlines()]
+    assert sorted(line["id"] for line in lines) == ["q1", "q2"]
+    assert all(line == {"id": line["id"], "type": "number", "answer": 3} for line in lines)
+    traces = (settings.work_dir / "trace.jsonl").read_text().splitlines()
+    assert len(traces) == 2
+
+
+def test_analysis_step_reaches_every_candidate(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "analyze", True)
+    monkeypatch.setattr(settings, "analyze_extra_body", '{"thinking": {"type": "enabled"}}')
+    llm = FakeLLM(
+        lambda p: (
+            "Need: doanh thu tuần rồi, bỏ đơn huỷ"
+            if "Before any SQL is written" in p
+            else plan("number", REVENUE_LAST_WEEK)
+        )
+    )
+    calls = []
+    original = llm.complete
+
+    def spy(messages, seed=None, extra_body=None, max_tokens=None):
+        calls.append((messages[-1]["content"], extra_body, max_tokens))
+        return original(messages, seed=seed, extra_body=extra_body, max_tokens=max_tokens)
+
+    llm.complete = spy
+    answer, trace = service_for(toy_split, tmp_path, llm).answer(question())
+    assert answer.type == "number"
+    assert trace["analysis"] == "Need: doanh thu tuần rồi, bỏ đơn huỷ"
+    first, *generate = calls
+    assert first[1] == {"thinking": {"type": "enabled"}} and first[2] == settings.analyze_max_tokens
+    assert len(generate) == settings.k
+    assert all("bỏ đơn huỷ" in prompt and body is None for prompt, body, _ in generate)

@@ -2,7 +2,7 @@ import duckdb
 import pandas as pd
 import pytest
 
-from src.modules.ingest import parse_number, read_tables, to_identifier
+from src.modules.ingest import Table, merge_split_tables, parse_number, read_tables, to_identifier
 from src.modules.ingest.clean import detect_header_row, number_locale
 from src.services.ingest import IngestService
 
@@ -14,7 +14,14 @@ from src.services.ingest import IngestService
         ("1,200,000", 1200000),
         ("12,5", 12.5),
         ("12.5", 12.5),
-        ("350.000 đ", 350),
+        ("350.000 đ", 350000),  # VND has no decimals
+        ("50.000đ", 50000),
+        ("9.999đ", 9999),
+        ("25k", 25000),
+        ("1,5tr", 1500000),
+        ("2 triệu", 2000000),
+        ("30 nghìn", 30000),
+        ("12.500", 12.5),  # no currency, ambiguous: read as a decimal
         ("1.234,5 VNĐ", 1234.5),
         ("15%", 0.15),
         ("-3", -3),
@@ -74,3 +81,54 @@ def test_ingest_service_builds_and_caches(toy_split, tmp_path):
     # a second service reuses the on-disk cache
     again = IngestService(tmp_path / "work").load("shop1", toy_split / "businesses/shop1")
     assert again.db_path == ctx.db_path
+
+
+def test_split_sheets_and_files_are_merged_with_a_source_column():
+    def raw(rows):
+        return pd.DataFrame(rows, columns=["ma_don", "tong_tien"])
+
+    tables = [
+        Table(
+            "donhang_chitiet_1__t01_2025",
+            "DonHang_ChiTiet_1.xlsx#T01",
+            raw([["A", "25k"]]),
+            ["Mã", "Tổng"],
+        ),
+        Table(
+            "donhang_chitiet_1__t02_2025",
+            "DonHang_ChiTiet_1.xlsx#T02",
+            raw([["B", "9.999đ"]]),
+            ["Mã", "Tổng"],
+        ),
+        Table(
+            "donhang_chitiet_2026__t01_2026",
+            "DonHang_ChiTiet_2026.xlsx#T01",
+            raw([["C", "18000"]]),
+            ["Mã", "Tổng"],
+        ),
+        Table("khach_hang", "KhachHang.xlsx", pd.DataFrame({"ma_kh": ["K1"]}), ["Mã KH"]),
+    ]
+    out = {t.name: t for t in merge_split_tables(tables)}
+    assert set(out) == {"donhang_chitiet", "khach_hang"}
+    merged = out["donhang_chitiet"]
+    assert merged.frame["tong_tien"].tolist() == [25000, 9999, 18000]
+    assert merged.frame["nguon"].tolist()[0] == "DonHang_ChiTiet_1.xlsx#T01"
+    assert merged.originals[-1] == "Nguồn (file#sheet)"
+
+
+def test_grouped_export_fills_parent_cells_only():
+    from src.modules.ingest.clean import fill_grouped_rows
+
+    frame = pd.DataFrame(
+        {
+            "ma_don_hang": ["D1", None, "D2", "D3", None],
+            "ngay_dat_hang": ["01/05/2025", None, "01/05/2025", "02/05/2025", None],
+            "ten_khach_hang": ["An", None, "Khách lẻ", "Bình", None],
+            "ma_khach": ["K1", "K1", None, "K3", "K3"],  # blank for a walk-in: kept blank
+            "ten_san_pham": ["A", "B", "C", "D", "E"],
+        }
+    )
+    out = fill_grouped_rows(frame)
+    assert out["ma_don_hang"].tolist() == ["D1", "D1", "D2", "D3", "D3"]
+    assert out["ngay_dat_hang"].tolist()[1] == "01/05/2025"
+    assert out["ma_khach"].isna().tolist() == [False, False, True, False, False]
