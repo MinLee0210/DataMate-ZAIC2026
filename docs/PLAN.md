@@ -4,6 +4,54 @@ Written 2026-10-26 for an agent picking up the work. Each task is self-contained
 steps, and a check that says when it is done. Do them in order within a milestone unless marked
 **parallel**. When a task is finished, tick it here and add a line to docs/NOTES.md.
 
+## Next session (2026-10-28): first run on a GPU pod
+
+The user provides a pod (A40, 48 GB) with its SSH config. Goal: the first legal public_test
+submission with the target model, and the real dev200 PA of Qwen3-14B. Every number so far is
+from hosted `deepseek-flash`. Runbook: [scripts/pod/README.md](../scripts/pod/README.md).
+
+Where we are (2026-10-27): dataAgent (`PIPELINE=ca`) with thinking is the best setup, dev200 PA
+0.55 (122 right / 12 wrong / 66 abstain) on deepseek-flash, measured **before** the four ingest
+fixes. Public leaderboard: −0.169, then −0.023 (deepseek-flash, vote pipeline + rulebook).
+
+1. [ ] **Get the pod config** from the user: SSH host, port, user, key; GPU, CUDA version, disk,
+   internet. Check `nvidia-smi` and the disk (about 100 GB).
+2. [ ] **Copy and set up**: rsync the repo and `data/train`, `data/public_test`; write the pod
+   `.env` (runbook §2); run `./scripts/pod/setup.sh` (uv, project env, vLLM in `.venv-vllm`,
+   weights in `/models/target`, ingest of both splits).
+3. [ ] **Start vLLM**: `TP=1 QUANTIZATION=fp8 ./scripts/vllm.sh` in tmux. It is ready when
+   `curl 127.0.0.1:8001/v1/models` answers. If YaRN or `--hf-overrides` fails on that vLLM
+   version, check the flag name and fix `scripts/vllm.sh`.
+4. [ ] **Smoke test** one train question (`notebooks.llm_call --id q_001883280e83`): the answer
+   is right, there is a `<think>` block, the reply is parsed, and the time per question is noted.
+5. [ ] **dev200 on Qwen3-14B**: `make eval SUBSET=dev200 TOPIC=qwen3-ca-thinking WORKERS=8`.
+   Record PA, the share of question errors (cut-off thinking, bad JSON) and seconds per question.
+   If more than about 5 % of the questions fail, lower `ANALYZE_MAX_TOKENS` or turn thinking on
+   only for the "think on the results" step, then measure again.
+6. [ ] **Same dev200 with thinking off** (`ANALYZE_EXTRA_BODY=`) to see what thinking costs in
+   time and gives in PA on the target model.
+7. [ ] **public_test**: `START_VLLM=0 SPLIT=public_test ... ./scripts/infer.sh`, then
+   `scripts.export --topic public-test-qwen3`. Check 1000 lines with the strict checker, then
+   the user uploads it.
+8. [ ] **Rerun check**: run public_test a second time and diff the two files (rule 8: PA
+   difference ≤ 0.03). Count the lines that differ and look at why.
+9. [ ] **Time budget**: from steps 5 and 7, estimate the time for the private test on 2x RTX 5090
+   (rule 7: 6 h including model loading). Decide whether thinking fits.
+10. [ ] Write the results to docs/NOTES.md and EXPERIMENTS.md (eval does the rows), commit and
+    push (pre-commit first; `git_acc personal`, then back to `work`).
+
+Also open, not blocking the pod run:
+- The dev200 run of dataAgent with thinking on the fixed ingest (`ca-thinking-ingest3`) was
+  stopped. Re-run it on deepseek-flash if the pod is late, to measure the ingest fixes.
+- 66 abstentions out of 200: find which ones the model could answer (error analysis on train).
+- Revenue definitions off by 1–4 % (about 20 wrong answers): fill the `business-metrics` skill
+  and semantic views from the rulebook (T2, T3).
+- Hold-out by business or shop type before any fine-tuning on train (dev200 overlaps train
+  businesses).
+- Rename `PIPELINE=ca` / `ca.py` / `ca_*.md` to dataAgent if the user wants it.
+- The default `PIPELINE` in `src/config.py` is still `vote`; switch to `ca` once the pod results
+  confirm it.
+
 ## 0. Read first
 
 1. `CLAUDE.md`: hard rules (offline, ≤ 15B, no test answers, no business-specific code,

@@ -64,3 +64,10 @@ def test_first_json_object_ignores_extra_text(reply):
     from src.modules.agents.sql_agent import first_json_object
 
     assert first_json_object(reply) == {"action": "final", "x": 1}
+
+
+def test_cut_off_thinking_is_not_parsed_as_the_answer():
+    from src.modules.agents.sql_agent import PlanParseError, first_json_object
+
+    with pytest.raises(PlanParseError):
+        first_json_object('<think>maybe reply {"action": "final", "x": 1} then check')

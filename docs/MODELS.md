@@ -17,14 +17,16 @@ Alternatives to compare on dev200 with the same pipeline before locking the targ
 `Qwen/Qwen2.5-Coder-14B-Instruct` (14.7B), `seeklhy/OmniSQL-14B` (~14.8B, text-to-SQL tuned). Verify
 the parameter count and release date from the model card before adding a row above.
 
-Serving: vLLM, bf16, tensor parallel 2 on 2× RTX 5090, thinking disabled
-(`chat_template_kwargs.enable_thinking=false`), settings pinned in `scripts/vllm.sh`.
+Serving: vLLM, settings pinned in `scripts/vllm.sh`: bf16 with tensor parallel 2 on 2× RTX 5090
+(fp8 with `TP=1` on a single 48 GB GPU), prefix caching, `max-model-len` 49152 with static YaRN
+(factor 1.5 over the native 32768). Thinking is off for plain calls and on for dataAgent's
+reasoning steps (`ANALYZE_EXTRA_BODY={"chat_template_kwargs": {"enable_thinking": true}}`).
 
 ## Development only (not at inference, no budget)
 
 | Role | Where | Model |
 |---|---|---|
-| Hosted copy of the target (dev_free) | `src/` through `LLM_BASE_URL` | OpenRouter `qwen/qwen3-14b` |
+| Hosted model (dev_free, train only) | `src/` through `LLM_BASE_URL` | DeepSeek `deepseek-flash`; OpenRouter `qwen/qwen3-14b` |
 | Teacher for synthetic train data | `scripts/datagen/` only | `DATAGEN_MODEL` (default `openai/gpt-5.5`) |
 
 The teacher runs on train businesses only, never on public_test or private_test.

@@ -16,7 +16,8 @@ DEFAULT_SKILLS = [
     "messy-data",
 ]
 _DECODER = json.JSONDecoder()
-_THINK = re.compile(r"<think>.*?</think>", re.DOTALL)
+# a thinking block, closed or cut off by max_tokens (then it runs to the end of the reply)
+_THINK = re.compile(r"<think>.*?(?:</think>|$)", re.DOTALL)
 
 
 class PlanParseError(ValueError):

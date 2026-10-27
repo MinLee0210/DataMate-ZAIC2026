@@ -2,6 +2,25 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-27 - Ready for a GPU pod: context length, thinking, run scripts
+- Prompt sizes with the Qwen3 tokenizer: system prompt (template, skills, rulebook) 7.6k tokens
+  on train and 8.8k on public_test; the step-1 user prompt up to 10.7k (train) and 14.5k
+  (public_test, dev_005). Later steps add results and thoughts, so about 28k. With thinking this
+  is above Qwen3's native 32768, and vLLM rejects a request whose prompt + max_tokens exceed
+  `max-model-len`.
+- `scripts/vllm.sh`: every setting is an env variable; `MAX_MODEL_LEN` 49152 with static YaRN
+  (factor = length / 32768, as the Qwen3 card describes), prefix caching on, `QUANTIZATION` and
+  `KV_CACHE_DTYPE` for one 48 GB GPU (`TP=1 QUANTIZATION=fp8`). Defaults stay for 2× RTX 5090.
+- `scripts/infer.sh` now runs dataAgent with thinking on its reasoning steps, 8 workers,
+  `ANALYZE_MAX_TOKENS` 12288 (all overridable).
+- A thinking block cut off by max_tokens is dropped before JSON parsing, so a JSON-like line in
+  the thinking is never read as the answer.
+- `scripts/pod/` (setup.sh, README.md): copy, set up, serve, smoke test, dev200, public_test,
+  rerun. `scripts/export.py` exports any run's submission in the portal format.
+- Open: greedy decoding (temperature 0) in thinking mode can loop (the Qwen3 card recommends
+  sampling); kept for determinism, to be checked on the pod by the share of cut-off replies.
+- Why: the user will provide a pod (A40) for the first legal public_test run, then 2× RTX 5090.
+
 ## 2026-10-27 - Ingest fixes from error analysis; messy-data skill; CA with thinking
 - Four ingest errors made tables wrong (details and affected businesses:
   [notes/2026-10-27/data-errors/notes.md](notes/2026-10-27/data-errors/notes.md)): dot thousands
