@@ -50,3 +50,17 @@ def test_rulebook_goes_last_in_system_prompt():
     assert agent.system_prompt.endswith("Khách sộp nhất: từ 3 đơn trở lên")
     assert "{{rulebook}}" not in agent.system_prompt
     assert SQLAgent(llm=FakeLLM()).rulebook == ""
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        'Here: {"action": "final", "x": 1} and also {"action": "abstain"}',
+        '{"action": "final", "x": 1}\n\nNote: the result {looks} right.',
+        '<think>maybe {not json}</think>```json\n{"action": "final", "x": 1}\n```',
+    ],
+)
+def test_first_json_object_ignores_extra_text(reply):
+    from src.modules.agents.sql_agent import first_json_object
+
+    assert first_json_object(reply) == {"action": "final", "x": 1}

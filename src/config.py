@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # vLLM Qwen3 '{"chat_template_kwargs": {"enable_thinking": true}}'
     analyze_extra_body: str = ""
     # thinking tokens count against max_tokens, so those calls get more room
-    analyze_max_tokens: int = 4096
+    analyze_max_tokens: int = 16384
 
     # FINAL_MODE=1: competition inference, only a local LLM endpoint is allowed
     final_mode: bool = False

@@ -8,12 +8,13 @@ in `app/`. Run it with `make run` (`APP_HOST`, `APP_PORT`, `APP_RELOAD` from `.e
 src/
 ├── __main__.py      batch: questions → QAService → submission.jsonl (append + fsync) + trace
 ├── config.py        Settings (pydantic-settings, reads .env); FINAL_MODE=1 needs a local LLM URL
-├── models/          Question, Answer, SubmissionLine, SchemaCard
+├── models/          Question, Answer, SubmissionLine, SchemaCard, LLMUsage
 ├── data/            DuckDBSource (read-only, guarded queries), layout.py (dataset paths)
 ├── modules/         agent core: ingest, context, semantic, agents + llm, decide
-├── services/        ingest (package → DuckDB + context), qa (LangGraph pipeline)
+├── services/        ingest (package → DuckDB + context), qa (dataAgent, vote pipeline)
 ├── routes/          /health, /ask (debugging, demo UI)
-├── utils/           deterministic helpers: format, timeparse, text, health, logger
+├── utils/           deterministic helpers: format, timeparse, text, assets (prompt and skill
+│                    files), health, logger
 ├── evaluate/        official PA scorer (rulebook §9); used by scripts/eval.py, not by the pipeline
 └── assets/          prompt_templates/, skills/, semantic/
 ```
@@ -32,9 +33,21 @@ What goes where:
 - `evaluate/` is the official PA scorer. It judges the pipeline's output and is never imported
   by it, so it stays outside both.
 
-`services/qa/graph.py` is the per-question LangGraph:
-`prepare` (time ranges, entity links; no LLM) → `generate` (k prompt variants, 1 step) → `execute`
-(DuckDB) → `repair` on failures (≤ `max_repairs` steps) → `decide` (vote, tau).
+Two per-question pipelines, chosen by `PIPELINE`:
+
+- `services/qa/ca.py` (`ca`): dataAgent, a bounded reasoning loop.
+  Think on the schema (LLM) → sample the fields it asked for
+  (`modules/context/sampling.py`, no LLM) → named data queries (LLM) → DuckDB → think on the
+  results (LLM): `final`, `abstain`, a pandas `analysis` (`modules/python_exec.py`) or one more
+  `data_query` → think again (LLM) → the chosen result formatted in code. At most 4 LLM steps. Every
+  step is in the trace as a message (`thought`, `progress`, `data`, `analysis`,
+  `error`, `final`).
+- `services/qa/graph.py` (`vote`): a LangGraph: `prepare` (time ranges, entity links; no LLM) →
+  optional `analyze` → `generate` (k prompt variants, 1 step) → `execute` (DuckDB) → `repair` on
+  failures (≤ `max_repairs` steps) → `decide` (vote, tau).
+
+Both read the same context (`graph.build_context`) and the same system prompt: the agent's
+template, the skills, and the split's rulebook.
 
 ## Rules that apply here (from CLAUDE.md)
 

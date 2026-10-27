@@ -15,12 +15,32 @@ DEFAULT_SKILLS = [
     "unanswerable",
     "messy-data",
 ]
-_JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
+_DECODER = json.JSONDecoder()
 _THINK = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
 class PlanParseError(ValueError):
     pass
+
+
+def first_json_object(text: str) -> dict:
+    """The first JSON object in a reply, ignoring text before or after it (and other objects).
+
+    Raises PlanParseError when no object decodes."""
+    text = _THINK.sub("", text)
+    start = text.find("{")
+    if start < 0:
+        raise PlanParseError("no JSON object in reply")
+    error = None
+    while start >= 0:
+        try:
+            data, _ = _DECODER.raw_decode(text, start)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError as e:
+            error = error or e
+        start = text.find("{", start + 1)
+    raise PlanParseError(f"invalid JSON: {error}")
 
 
 @dataclass
@@ -32,14 +52,7 @@ class SQLPlan:
 
 def parse_plan(text: str) -> SQLPlan:
     """Parse the model's JSON reply. Raises PlanParseError when it is not a valid plan."""
-    text = _THINK.sub("", text)
-    match = _JSON_BLOCK.search(text)
-    if not match:
-        raise PlanParseError("no JSON object in reply")
-    try:
-        data = json.loads(match.group(0))
-    except json.JSONDecodeError as e:
-        raise PlanParseError(f"invalid JSON: {e}") from e
+    data = first_json_object(text)
     answer_type = str(data.get("answer_type", "")).strip().lower()
     sql = str(data.get("sql") or "").strip().rstrip(";")
     if answer_type == "unanswerable":
@@ -120,16 +133,7 @@ class SQLAgent(BaseAgent):
             extra_body=extra_body,
             max_tokens=max_tokens,
         )
-        match = _JSON_BLOCK.search(_THINK.sub("", reply))
-        if not match:
-            raise PlanParseError("no JSON object in reply")
-        try:
-            data = json.loads(match.group(0))
-        except json.JSONDecodeError as e:
-            raise PlanParseError(f"invalid JSON: {e}") from e
-        if not isinstance(data, dict):
-            raise PlanParseError("reply is not a JSON object")
-        return data
+        return first_json_object(reply)
 
     def generate(self, context: dict[str, str], variant: int, seed: int) -> SQLPlan:
         prompt = render(
