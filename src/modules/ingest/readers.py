@@ -6,7 +6,13 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
-from src.modules.ingest.clean import fill_grouped_rows, frame_from_raw, infer_types, to_identifier
+from src.modules.ingest.clean import (
+    drop_duplicate_order_lines,
+    fill_grouped_rows,
+    frame_from_raw,
+    infer_types,
+    to_identifier,
+)
 from src.utils import get_logger
 
 logger = get_logger(__name__)
@@ -107,7 +113,7 @@ def read_tables(path: Path, infer: bool = True) -> list[Table]:
         if table.frame.empty:
             logger.warning("skipping empty table %s", table.source)
             continue
-        table.frame = fill_grouped_rows(table.frame)
+        table.frame = drop_duplicate_order_lines(fill_grouped_rows(table.frame))
         if infer:
             table.frame = infer_types(table.frame)
         out.append(table)

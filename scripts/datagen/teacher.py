@@ -22,6 +22,7 @@ from deepagents.middleware.filesystem import FilesystemPermission
 from langchain_openai import ChatOpenAI
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from scripts.splits import is_holdout
 from src.config import settings
 from src.data.duckdb import DuckDBSource
 from src.data.layout import calendar_file, list_businesses, split_dir
@@ -108,6 +109,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--split", default="train")
     parser.add_argument("--per-business", type=int, default=30)
     parser.add_argument("--limit-businesses", type=int, default=0)
+    parser.add_argument(
+        "--include-holdout",
+        action="store_true",
+        help="also generate from the hold-out businesses (scripts/splits.py); off by default",
+    )
     parser.add_argument("--out", type=Path, default=ROOT / "data" / "synth" / "teacher.jsonl")
     args = parser.parse_args(argv)
     config = DatagenSettings()
@@ -125,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
     root = split_dir(settings.data_dir, args.split)
     ingest = IngestService(settings.work_dir, calendar=calendar_file(root))
     businesses = list_businesses(root)
+    if not args.include_holdout:
+        businesses = [b for b in businesses if not is_holdout(b.name)]
     if args.limit_businesses:
         businesses = businesses[: args.limit_businesses]
     args.out.parent.mkdir(parents=True, exist_ok=True)

@@ -2,6 +2,25 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-28 - Experiment tracking on W&B; hold-out split; duplicate order lines
+- W&B project `octoopt/zaic2026-datamate`. `scripts/devfree/wandb_report.py` reads what the eval
+  wrote (`docs/analysis/<date>/<topic>/metrics.json`, `summary.md`) and logs PA, right / wrong /
+  abstain, per answer type, the PA-vs-tau curve, timings and tokens; `test` logs a public or
+  private test run (counts and timings only, never the predictions, plus the leaderboard PA when
+  known). Nothing in `src/` or `scripts/eval.py` imports wandb (extra `tracking`). Pod runs are
+  copied to the Mac and reported from there, so the W&B key never goes to the pod.
+- `metrics.json` now records the run's config (model, pipeline, thinking, subset, workers, k,
+  tau), the per-type table and the tau curve; each eval keeps its own `trace.jsonl` in its run dir.
+- Hold-out (`scripts/splits.py`): one business per shop type, never used for training, datagen or
+  retrieval: biz_102 (grocery), biz_106 (cafe), biz_114 (building materials), biz_120 (pharmacy),
+  biz_125 (small), biz_130 (restaurant); 554 questions. `--subset holdout` / `holdout200`.
+- Ingest (version 4): duplicate lines of an order are dropped (rulebook §8: equal in every cell =
+  export error, counts once). Found in 6 train businesses; it explains the revenue answers about
+  1-4 % too high (biz_128 "hôm nay": 40,228,500 with duplicates, 39,793,500 = gold without).
+- `business-metrics` skill: SQL recipes (status folding, whole-order exclusion on returns, line
+  totals, base units, rounding, shares, growth, customers, debt). DuckDB `strip_accents` keeps
+  `đ`, so folding also replaces `đ` with `d`.
+
 ## 2026-10-27 - Ready for a GPU pod: context length, thinking, run scripts
 - Prompt sizes with the Qwen3 tokenizer: system prompt (template, skills, rulebook) 7.6k tokens
   on train and 8.8k on public_test; the step-1 user prompt up to 10.7k (train) and 14.5k

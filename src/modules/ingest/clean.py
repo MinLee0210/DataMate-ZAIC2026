@@ -123,6 +123,22 @@ def fill_grouped_rows(frame: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+_ORDER_CODE = re.compile(
+    r"(^|_)(ma|so|id)_.*(don|phieu|hoa_don|hd|ct|order)(_|$)|^(so_ct|so_phieu)$"
+)
+
+
+def drop_duplicate_order_lines(frame: pd.DataFrame) -> pd.DataFrame:
+    """Drop rows identical in every cell, in a table with an order code column.
+
+    Rulebook §8: two lines of the same order that are equal in every cell are an export error
+    and count once. In a table without an order code, equal rows are two records and stay.
+    """
+    if not any(_ORDER_CODE.search(str(c)) for c in frame.columns):
+        return frame
+    return frame.drop_duplicates(ignore_index=True)
+
+
 def number_locale(values: pd.Series) -> str | None:
     """'vi' (1.234.567,5) or 'en' (1,234,567.5) when the column's unambiguous values agree.
 

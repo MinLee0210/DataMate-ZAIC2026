@@ -193,5 +193,13 @@
       "p95": 84.274,
       "max": 161.6677
     }
+  },
+  "config": {
+    "model": "Qwen/Qwen3-14B:deepinfra (HF router)",
+    "pipeline": "vote",
+    "thinking": false,
+    "subset": "dev200",
+    "split": "train",
+    "workers": 1
   }
 }

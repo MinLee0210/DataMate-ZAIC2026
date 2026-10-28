@@ -27,6 +27,10 @@ datagen = [
     "deepagents>=0.7.32",
     "langchain-openai>=1.7.2",
 ]
+# experiment tracking (scripts/devfree/wandb_report.py), dev only
+tracking = [
+    "wandb>=0.22",
+]
 
 [dependency-groups]
 dev = [

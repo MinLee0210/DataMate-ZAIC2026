@@ -15,7 +15,9 @@ yourself: sample the column, then fix it in the query (SQL) or in an analysis st
   in parts (`DonHang_1`, `DonHang_2026`, `Lo_1`, `Lo_2`) with the same columns are one table. The
   column `nguon` holds each row's file and sheet. Query the merged table; do not union by hand.
 - **Grouped exports are filled down.** When an order's code, date, status and customer were
-  written on its first line only, the next lines got them filled in.
+  written on its first line only, the next lines got them filled in (rulebook §8).
+- **Duplicate lines of an order are dropped.** Two lines of the same order equal in every cell
+  count once (rulebook §8). Equal rows in a table without an order code are kept.
 - **Headers** are found below titles; merged cells repeat their value.
 
 ## Check before trusting a result
@@ -33,6 +35,7 @@ yourself: sample the column, then fix it in the query (SQL) or in an analysis st
 - Line totals vs. order totals: do not add an order-level total once per line. Use one row per
   order (`DISTINCT` on the order code) for order-level columns.
 - The same item written differently (accents, case, extra spaces, abbreviations): match on the
-  code when there is one; otherwise compare folded text (`lower`, `strip_accents`, `trim`).
+  code when there is one; otherwise compare folded text:
+  `replace(strip_accents(lower(trim(x))), 'đ', 'd')` (`strip_accents` keeps `đ`).
 - Dates: check `min`/`max` of the date column against the as-of date; rows after it exist and must
   be excluded.

@@ -1,0 +1,78 @@
+{"id": "q_02eb42db6665", "score": -1, "reason": "wrong_value", "pred": {"id": "q_02eb42db6665", "type": "string", "answer": "Bia Sài Gòn Special lon"}, "gold": {"type": "string", "answer": "Bia Tiger lon", "alias": []}}
+{"id": "q_049799837470", "score": -1, "reason": "wrong_value", "pred": {"id": "q_049799837470", "type": "percent", "answer": 353}, "gold": {"type": "percent", "answer": 16.76, "alias": []}}
+{"id": "q_0add21504f80", "score": 1, "reason": "correct", "pred": {"id": "q_0add21504f80", "type": "number", "answer": 4695500}, "gold": {"type": "number", "answer": 4695500, "alias": []}}
+{"id": "q_0b6552ce1b0d", "score": 0, "reason": "abstain", "pred": {"id": "q_0b6552ce1b0d", "type": "abstain"}, "gold": {"type": "string", "answer": "Lâm Hoa Long", "alias": []}}
+{"id": "q_108e28168075", "score": 1, "reason": "correct", "pred": {"id": "q_108e28168075", "type": "number", "answer": 31}, "gold": {"type": "number", "answer": 31, "alias": []}}
+{"id": "q_1a79715010d5", "score": 0, "reason": "abstain", "pred": {"id": "q_1a79715010d5", "type": "abstain"}, "gold": {"type": "number", "answer": 2435, "alias": []}}
+{"id": "q_1d10eff57dca", "score": -1, "reason": "wrong_value", "pred": {"id": "q_1d10eff57dca", "type": "number", "answer": 481509}, "gold": {"type": "number", "answer": 518622, "alias": []}}
+{"id": "q_2033f8c99c05", "score": 1, "reason": "correct", "pred": {"id": "q_2033f8c99c05", "type": "number", "answer": 34}, "gold": {"type": "number", "answer": 34, "alias": []}}
+{"id": "q_2889186ce0d8", "score": -1, "reason": "wrong_value", "pred": {"id": "q_2889186ce0d8", "type": "number", "answer": 148920}, "gold": {"type": "number", "answer": 150182, "alias": []}}
+{"id": "q_2c97f6f308e9", "score": 0, "reason": "abstain", "pred": {"id": "q_2c97f6f308e9", "type": "abstain"}, "gold": {"type": "number", "answer": 9983, "alias": []}}
+{"id": "q_2dad0faf7600", "score": 1, "reason": "correct", "pred": {"id": "q_2dad0faf7600", "type": "number", "answer": 10351400}, "gold": {"type": "number", "answer": 10351400, "alias": []}}
+{"id": "q_2f435bf23bae", "score": 1, "reason": "correct", "pred": {"id": "q_2f435bf23bae", "type": "number", "answer": 1730000}, "gold": {"type": "number", "answer": 1730000, "alias": []}}
+{"id": "q_314e13662297", "score": 1, "reason": "correct", "pred": {"id": "q_314e13662297", "type": "number", "answer": 246242900}, "gold": {"type": "number", "answer": 246242900, "alias": []}}
+{"id": "q_31be06f05a4d", "score": 0, "reason": "abstain", "pred": {"id": "q_31be06f05a4d", "type": "abstain"}, "gold": {"type": "percent", "answer": 2.31, "alias": []}}
+{"id": "q_3fe3f0931b71", "score": 0, "reason": "abstain", "pred": {"id": "q_3fe3f0931b71", "type": "abstain"}, "gold": {"type": "percent", "answer": 171.43, "alias": []}}
+{"id": "q_48fe8e662427", "score": 1, "reason": "correct", "pred": {"id": "q_48fe8e662427", "type": "number", "answer": 62109000}, "gold": {"type": "number", "answer": 62109000, "alias": []}}
+{"id": "q_4d62702edd62", "score": 0, "reason": "abstain", "pred": {"id": "q_4d62702edd62", "type": "abstain"}, "gold": {"type": "list", "answer": ["Tiffy Dey hộp 25 vỉ x 4 viên", "Hapacol 250 hộp 24 gói", "Smecta hộp 30 gói"], "alias": [["SP0004"], ["SP0002"], ["SP0012"]]}}
+{"id": "q_4d7fc53fcc41", "score": -1, "reason": "wrong_value", "pred": {"id": "q_4d7fc53fcc41", "type": "number", "answer": 26}, "gold": {"type": "number", "answer": 1828785, "alias": []}}
+{"id": "q_4dc24191967d", "score": 1, "reason": "correct", "pred": {"id": "q_4dc24191967d", "type": "number", "answer": 17654500}, "gold": {"type": "number", "answer": 17654500, "alias": []}}
+{"id": "q_5bacacf2e035", "score": 1, "reason": "correct", "pred": {"id": "q_5bacacf2e035", "type": "number", "answer": 156305}, "gold": {"type": "number", "answer": 156305, "alias": []}}
+{"id": "q_63501211fe59", "score": 1, "reason": "correct", "pred": {"id": "q_63501211fe59", "type": "percent", "answer": -66.67}, "gold": {"type": "percent", "answer": -66.67, "alias": []}}
+{"id": "q_635a91eb5125", "score": 0, "reason": "abstain", "pred": {"id": "q_635a91eb5125", "type": "abstain"}, "gold": {"type": "number", "answer": 26768000, "alias": []}}
+{"id": "q_6501ddf05b36", "score": 1, "reason": "correct", "pred": {"id": "q_6501ddf05b36", "type": "number", "answer": 79}, "gold": {"type": "number", "answer": 79, "alias": []}}
+{"id": "q_6b4754b099c6", "score": 1, "reason": "correct", "pred": {"id": "q_6b4754b099c6", "type": "percent", "answer": 11.56}, "gold": {"type": "percent", "answer": 11.56, "alias": []}}
+{"id": "q_6e3896c1d2db", "score": 1, "reason": "correct", "pred": {"id": "q_6e3896c1d2db", "type": "number", "answer": 269053100}, "gold": {"type": "number", "answer": 269053100, "alias": []}}
+{"id": "q_790352105703", "score": 1, "reason": "correct", "pred": {"id": "q_790352105703", "type": "number", "answer": 26}, "gold": {"type": "number", "answer": 26, "alias": []}}
+{"id": "q_7ebd4d633970", "score": 1, "reason": "correct", "pred": {"id": "q_7ebd4d633970", "type": "percent", "answer": 4.8}, "gold": {"type": "percent", "answer": 4.8, "alias": []}}
+{"id": "q_8d076e8b04fa", "score": 0, "reason": "abstain", "pred": {"id": "q_8d076e8b04fa", "type": "abstain"}, "gold": {"type": "number", "answer": 72603400, "alias": []}}
+{"id": "q_8d2f278b9ac9", "score": -1, "reason": "wrong_value", "pred": {"id": "q_8d2f278b9ac9", "type": "number", "answer": 3675400}, "gold": {"type": "number", "answer": 3462700, "alias": []}}
+{"id": "q_8e2acddfe818", "score": 0, "reason": "abstain", "pred": {"id": "q_8e2acddfe818", "type": "abstain"}, "gold": {"type": "number", "answer": 1321748, "alias": []}}
+{"id": "q_91f79e9456a1", "score": 0, "reason": "abstain", "pred": {"id": "q_91f79e9456a1", "type": "abstain"}, "gold": {"type": "percent", "answer": -51.21, "alias": []}}
+{"id": "q_9616f4d55ee6", "score": 1, "reason": "correct", "pred": {"id": "q_9616f4d55ee6", "type": "number", "answer": 452292400}, "gold": {"type": "number", "answer": 452292400, "alias": []}}
+{"id": "q_9707962ad285", "score": -1, "reason": "wrong_value", "pred": {"id": "q_9707962ad285", "type": "list", "answer": ["Cà phê sữa (M)", "Cà phê đen (M)", "Trà đào cam sả (M)"]}, "gold": {"type": "list", "answer": ["Cà phê sữa (M)", "Cà phê đen (M)", "Trà sữa trân châu (M)"], "alias": [["SP0003"], ["SP0001"], ["SP0021"]]}}
+{"id": "q_983e4fc2d9f7", "score": 1, "reason": "correct", "pred": {"id": "q_983e4fc2d9f7", "type": "percent", "answer": 5.18}, "gold": {"type": "percent", "answer": 5.18, "alias": []}}
+{"id": "q_9a0064180180", "score": 1, "reason": "correct", "pred": {"id": "q_9a0064180180", "type": "percent", "answer": 11.11}, "gold": {"type": "percent", "answer": 11.11, "alias": []}}
+{"id": "q_a0aa88c9c8d7", "score": 0, "reason": "abstain", "pred": {"id": "q_a0aa88c9c8d7", "type": "abstain"}, "gold": {"type": "number", "answer": 1, "alias": []}}
+{"id": "q_a77c5a478efe", "score": -1, "reason": "wrong_value", "pred": {"id": "q_a77c5a478efe", "type": "percent", "answer": 20.82}, "gold": {"type": "percent", "answer": 23.1, "alias": []}}
+{"id": "q_a7a02781f520", "score": 0, "reason": "abstain", "pred": {"id": "q_a7a02781f520", "type": "abstain"}, "gold": {"type": "number", "answer": 38, "alias": []}}
+{"id": "q_ab189f9bec71", "score": 1, "reason": "correct", "pred": {"id": "q_ab189f9bec71", "type": "percent", "answer": 13.74}, "gold": {"type": "percent", "answer": 13.74, "alias": []}}
+{"id": "q_ab910254f626", "score": 0, "reason": "abstain", "pred": {"id": "q_ab910254f626", "type": "abstain"}, "gold": {"type": "number", "answer": 2943, "alias": []}}
+{"id": "q_acf7143a0d06", "score": -1, "reason": "wrong_value", "pred": {"id": "q_acf7143a0d06", "type": "number", "answer": 141969700}, "gold": {"type": "number", "answer": 137395800, "alias": []}}
+{"id": "q_ae0df4a36ad5", "score": 0, "reason": "abstain", "pred": {"id": "q_ae0df4a36ad5", "type": "abstain"}, "gold": {"type": "number", "answer": 110, "alias": []}}
+{"id": "q_ae52d717e859", "score": 1, "reason": "correct", "pred": {"id": "q_ae52d717e859", "type": "number", "answer": 2829684}, "gold": {"type": "number", "answer": 2829684, "alias": []}}
+{"id": "q_af07b556c20b", "score": 1, "reason": "correct", "pred": {"id": "q_af07b556c20b", "type": "date", "answer": "2025-03-03"}, "gold": {"type": "date", "answer": "2025-03-03", "alias": []}}
+{"id": "q_b0826e78f894", "score": 0, "reason": "abstain", "pred": {"id": "q_b0826e78f894", "type": "abstain"}, "gold": {"type": "number", "answer": 96, "alias": []}}
+{"id": "q_b143fabbd8ae", "score": 1, "reason": "correct", "pred": {"id": "q_b143fabbd8ae", "type": "percent", "answer": -1.86}, "gold": {"type": "percent", "answer": -1.86, "alias": []}}
+{"id": "q_bc31d4d1636d", "score": 1, "reason": "correct", "pred": {"id": "q_bc31d4d1636d", "type": "number", "answer": 246039400}, "gold": {"type": "number", "answer": 246039400, "alias": []}}
+{"id": "q_bc6e400d302a", "score": 0, "reason": "abstain", "pred": {"id": "q_bc6e400d302a", "type": "abstain"}, "gold": {"type": "date", "answer": "2025-08-07", "alias": []}}
+{"id": "q_c06729907fcc", "score": 1, "reason": "correct", "pred": {"id": "q_c06729907fcc", "type": "number", "answer": 4598548}, "gold": {"type": "number", "answer": 4598548, "alias": []}}
+{"id": "q_c79ab64fce22", "score": -1, "reason": "wrong_value", "pred": {"id": "q_c79ab64fce22", "type": "number", "answer": 85950600}, "gold": {"type": "number", "answer": 83569100, "alias": []}}
+{"id": "q_c94926eebb4c", "score": 0, "reason": "abstain", "pred": {"id": "q_c94926eebb4c", "type": "abstain"}, "gold": {"type": "list", "answer": [6950600, 146347600], "alias": []}}
+{"id": "q_ca29c57994d9", "score": 0, "reason": "abstain", "pred": {"id": "q_ca29c57994d9", "type": "abstain"}, "gold": {"type": "number", "answer": 290169, "alias": []}}
+{"id": "q_cd8d3a282b9f", "score": 0, "reason": "abstain", "pred": {"id": "q_cd8d3a282b9f", "type": "abstain"}, "gold": {"type": "number", "answer": 258036900, "alias": []}}
+{"id": "q_d9f6efd2a92c", "score": 1, "reason": "correct", "pred": {"id": "q_d9f6efd2a92c", "type": "boolean", "answer": true}, "gold": {"type": "boolean", "answer": true, "alias": []}}
+{"id": "q_dbbfb4af332c", "score": 1, "reason": "correct", "pred": {"id": "q_dbbfb4af332c", "type": "date", "answer": "2025-04-30"}, "gold": {"type": "date", "answer": "2025-04-30", "alias": []}}
+{"id": "q_e04060a8515a", "score": 0, "reason": "abstain", "pred": {"id": "q_e04060a8515a", "type": "abstain"}, "gold": {"type": "number", "answer": 459715500, "alias": []}}
+{"id": "q_e2d23212a893", "score": 1, "reason": "correct", "pred": {"id": "q_e2d23212a893", "type": "date", "answer": "2025-08-30"}, "gold": {"type": "date", "answer": "2025-08-30", "alias": []}}
+{"id": "q_e764105fca6d", "score": 1, "reason": "correct", "pred": {"id": "q_e764105fca6d", "type": "number", "answer": 135}, "gold": {"type": "number", "answer": 135, "alias": []}}
+{"id": "q_e7837d5638fb", "score": 1, "reason": "correct", "pred": {"id": "q_e7837d5638fb", "type": "number", "answer": 248572900}, "gold": {"type": "number", "answer": 248572900, "alias": []}}
+{"id": "q_ee530fc682e1", "score": -1, "reason": "wrong_value", "pred": {"id": "q_ee530fc682e1", "type": "percent", "answer": 3.11}, "gold": {"type": "percent", "answer": 3.23, "alias": []}}
+{"id": "q_f0adbb2db8ff", "score": 0, "reason": "abstain", "pred": {"id": "q_f0adbb2db8ff", "type": "abstain"}, "gold": {"type": "number", "answer": 3584, "alias": []}}
+{"id": "q_f4cba6071b48", "score": 0, "reason": "abstain", "pred": {"id": "q_f4cba6071b48", "type": "abstain"}, "gold": {"type": "number", "answer": 541323, "alias": []}}
+{"id": "q_f7728d131abb", "score": -1, "reason": "wrong_value", "pred": {"id": "q_f7728d131abb", "type": "number", "answer": 451939300}, "gold": {"type": "number", "answer": 436963100, "alias": []}}
+{"id": "q_f969bd7ed482", "score": 1, "reason": "correct", "pred": {"id": "q_f969bd7ed482", "type": "number", "answer": 232535600}, "gold": {"type": "number", "answer": 232535600, "alias": []}}
+{"id": "q_fa48e43bff04", "score": 1, "reason": "correct", "pred": {"id": "q_fa48e43bff04", "type": "list", "answer": ["Panadol Extra hộp 15 vỉ x 12 viên", "Enervon hộp 10 vỉ x 10 viên", "Panadol 500mg hộp 10 vỉ x 12 viên", "Tiffy Dey hộp 25 vỉ x 4 viên", "Amoxicillin 500mg Domesco hộp 10 vỉ x 10 viên"]}, "gold": {"type": "list", "answer": ["Panadol Extra hộp 15 vỉ x 12 viên", "Enervon hộp 10 vỉ x 10 viên", "Panadol 500mg hộp 10 vỉ x 12 viên", "Tiffy Dey hộp 25 vỉ x 4 viên", "Amoxicillin 500mg Domesco hộp 10 vỉ x 10 viên"], "alias": [["SP0001"], ["SP0051"], ["SP0003"], ["SP0004"], ["SP0008"]]}}
+{"id": "q_fea67fe0f3cc", "score": 1, "reason": "correct", "pred": {"id": "q_fea67fe0f3cc", "type": "number", "answer": 226778500}, "gold": {"type": "number", "answer": 226778500, "alias": []}}
+{"id": "q_1c9d18cad635", "score": 1, "reason": "correct", "pred": {"id": "q_1c9d18cad635", "type": "percent", "answer": 6.55}, "gold": {"type": "percent", "answer": 6.55, "alias": []}}
+{"id": "q_33dcc7d5b828", "score": -1, "reason": "wrong_value", "pred": {"id": "q_33dcc7d5b828", "type": "percent", "answer": 2.88}, "gold": {"type": "percent", "answer": 2.78, "alias": []}}
+{"id": "q_83273acf61f7", "score": 0, "reason": "abstain", "pred": {"id": "q_83273acf61f7", "type": "abstain"}, "gold": {"type": "number", "answer": 1235500, "alias": []}}
+{"id": "q_9f908a9cf5e8", "score": 0, "reason": "abstain", "pred": {"id": "q_9f908a9cf5e8", "type": "abstain"}, "gold": {"type": "number", "answer": 2504000, "alias": []}}
+{"id": "q_a0e0238cd1f7", "score": 1, "reason": "correct", "pred": {"id": "q_a0e0238cd1f7", "type": "number", "answer": 23082000}, "gold": {"type": "number", "answer": 23082000, "alias": []}}
+{"id": "q_af71f9fa7d55", "score": 1, "reason": "correct", "pred": {"id": "q_af71f9fa7d55", "type": "percent", "answer": 10.88}, "gold": {"type": "percent", "answer": 10.88, "alias": []}}
+{"id": "q_b09ceaeabdc5", "score": 1, "reason": "correct", "pred": {"id": "q_b09ceaeabdc5", "type": "string", "answer": "Quách Phúc Hải"}, "gold": {"type": "string", "answer": "Quách Phúc Hải", "alias": ["KH0047"]}}
+{"id": "q_b0ff97ca1db9", "score": 1, "reason": "correct", "pred": {"id": "q_b0ff97ca1db9", "type": "number", "answer": 771}, "gold": {"type": "number", "answer": 771, "alias": []}}
+{"id": "q_b3e5c2fb4852", "score": 0, "reason": "abstain", "pred": {"id": "q_b3e5c2fb4852", "type": "abstain"}, "gold": {"type": "number", "answer": 129523500, "alias": []}}
+{"id": "q_bd2d824bb0a9", "score": -1, "reason": "wrong_value", "pred": {"id": "q_bd2d824bb0a9", "type": "percent", "answer": 19.03}, "gold": {"type": "percent", "answer": 19.13, "alias": []}}
+{"id": "q_cc8baa972e4f", "score": -1, "reason": "wrong_value", "pred": {"id": "q_cc8baa972e4f", "type": "percent", "answer": -19.05}, "gold": {"type": "percent", "answer": -15.79, "alias": []}}
+{"id": "q_cdaab312370d", "score": 1, "reason": "correct", "pred": {"id": "q_cdaab312370d", "type": "percent", "answer": 3.7}, "gold": {"type": "percent", "answer": 3.7, "alias": []}}

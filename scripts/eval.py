@@ -12,6 +12,7 @@ hand.
 import argparse
 import json
 import random
+import shutil
 import subprocess
 import sys
 from collections import Counter, defaultdict
@@ -21,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scripts.splits import HOLDOUT  # noqa: E402
 from src.evaluate import (  # noqa: E402
     check_format,
     diagnostics,
@@ -126,6 +128,7 @@ def report(
     topic: str,
     command: str,
     model: str = "",
+    config: dict | None = None,
 ) -> Path:
     scored = []
     by_type: dict[str, list[int]] = defaultdict(list)
@@ -158,6 +161,8 @@ def report(
         "",
         f"Model: `{model or 'not recorded'}`",
         "",
+        "Config: " + ", ".join(f"`{k}={v}`" for k, v in (config or {}).items()),
+        "",
         f"**PA {total['pa']}** on {total['n']} questions: {total['correct']} correct, "
         f"{total['wrong']} wrong, {total['abstain']} abstain.",
         "",
@@ -176,7 +181,16 @@ def report(
     if run_traces:
         lines += efficiency_section(eff)
     (out / "summary.md").write_text("\n".join(lines))
-    metrics = {"pa": total, "verdicts": dict(reasons), "diagnostics": diag, "efficiency": eff}
+    by_type_summary = {name: summarize(scores) for name, scores in sorted(by_type.items())}
+    metrics = {
+        "config": {"model": model, **(config or {})},
+        "pa": total,
+        "by_answer_type": by_type_summary,
+        "tau_curve": tau_curve(traces, golds, TAU_GRID) if traces else [],
+        "verdicts": dict(reasons),
+        "diagnostics": diag,
+        "efficiency": eff,
+    }
     (out / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2) + "\n")
 
     experiments = ROOT / "docs" / "EXPERIMENTS.md"
@@ -216,10 +230,18 @@ def export_submission(pred_path: Path, topic: str) -> Path:
 # ---------------------------------------------------------------- runner
 
 
-def subset_ids(ids: list[str], subset: str, seed: int = 2026) -> list[str]:
-    """'all', 'devN' (fixed random sample of N ids) or a path to an ids file."""
+def subset_ids(
+    ids: list[str], subset: str, seed: int = 2026, business_of: dict[str, str] | None = None
+) -> list[str]:
+    """'all', 'devN' (fixed random sample of N ids), 'holdout' / 'holdoutN' (questions of the
+    hold-out businesses, scripts/splits.py) or a path to an ids file."""
     if subset == "all":
         return sorted(ids)
+    if subset.startswith("holdout") and (subset == "holdout" or subset[7:].isdigit()):
+        held = sorted(i for i in ids if (business_of or {}).get(i) in HOLDOUT)
+        if subset == "holdout":
+            return held
+        return sorted(random.Random(seed).sample(held, min(int(subset[7:]), len(held))))
     if subset.startswith("dev") and subset[3:].isdigit():
         n = int(subset[3:])
         return sorted(random.Random(seed).sample(sorted(ids), min(n, len(ids))))
@@ -240,7 +262,8 @@ def main(argv: list[str] | None = None) -> int:
 
     root = split_dir(settings.data_dir, args.split)
     golds_all, questions = load_gold(root)
-    ids = subset_ids(list(golds_all), args.subset)
+    business_of = {i: q.get("business_id") for i, q in questions.items()}
+    ids = subset_ids(list(golds_all), args.subset, business_of=business_of)
     golds = {i: golds_all[i] for i in ids}
     command = " ".join(["python -m scripts.eval", *(argv or sys.argv[1:])])
 
@@ -271,9 +294,28 @@ def main(argv: list[str] | None = None) -> int:
             cwd=ROOT,
         )
         pred_path = run_dir / "submission.jsonl"
+    if pred_path == run_dir / "submission.jsonl" and trace_path.is_file():
+        # keep this run's traces next to its submission; the next run overwrites trace.jsonl
+        shutil.copy(trace_path, run_dir / "trace.jsonl")
     traces = {t["id"]: t for t in _load_jsonl(trace_path)}
     preds = read_submission(pred_path.read_text().splitlines()) if pred_path.is_file() else {}
-    summary = report(preds, golds, traces, questions, args.topic, command, settings.llm_model)
+    config = {
+        "split": args.split,
+        "subset": args.subset,
+        "pipeline": settings.pipeline,
+        "thinking": bool(settings.analyze_body)
+        if settings.pipeline == "ca" or settings.analyze
+        else False,
+        "analyze_extra_body": settings.analyze_extra_body,
+        "analyze_max_tokens": settings.analyze_max_tokens,
+        "k": settings.k,
+        "tau": settings.tau,
+        "workers": args.workers,
+        "llm_base_url": settings.llm_base_url,
+    }
+    summary = report(
+        preds, golds, traces, questions, args.topic, command, settings.llm_model, config
+    )
     if pred_path.is_file():
         print(f"submission exported to {export_submission(pred_path, args.topic)}")
     print(summary.read_text())

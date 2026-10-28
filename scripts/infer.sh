@@ -3,7 +3,7 @@
 # Env: VLLM_PORT (8001), DATA_DIR (/data), RESULT_DIR (/result), SPLIT (private_test),
 #      START_VLLM (1; 0 = use a server that is already running), WORKERS (8),
 #      PIPELINE (ca = dataAgent), ANALYZE_EXTRA_BODY (thinking on for the reasoning steps),
-#      ANALYZE_MAX_TOKENS (12288). vLLM settings: scripts/vllm.sh (MAX_MODEL_LEN must hold the
+#      ANALYZE_MAX_TOKENS (10240). vLLM settings: scripts/vllm.sh (MAX_MODEL_LEN must hold the
 #      longest prompt, about 28k tokens, plus ANALYZE_MAX_TOKENS).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -22,7 +22,7 @@ if [[ -z "${LLM_EXTRA_BODY:-}" ]]; then
 fi
 export PIPELINE="${PIPELINE:-ca}"
 export ANALYZE_EXTRA_BODY="${ANALYZE_EXTRA_BODY-{\"chat_template_kwargs\": {\"enable_thinking\": true}}}"
-export ANALYZE_MAX_TOKENS="${ANALYZE_MAX_TOKENS:-12288}"
+export ANALYZE_MAX_TOKENS="${ANALYZE_MAX_TOKENS:-10240}"
 export WORKERS="${WORKERS:-8}"
 
 if [[ "${START_VLLM:-1}" == "1" ]]; then

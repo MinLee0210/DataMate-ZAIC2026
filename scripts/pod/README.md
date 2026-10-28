@@ -6,14 +6,14 @@ competition machine, for timing and the rerun check. No hosted API is used on te
 
 ## What the pod needs
 - SSH access from the dev machine (host, port, user, key).
-- CUDA 12.4+ (12.8+ on RTX 5090), Python 3.12, about 100 GB of disk.
+- CUDA 12.4+ (12.8+ on RTX 5090), Python 3.12, **40 GB of disk** (about 26 GB used, see below).
 - Internet for the one-time downloads (uv, vLLM, the model weights).
 
 ## 1. Copy the repo and the data (from the dev machine)
 
 ```bash
 POD=user@host   # plus -p PORT / -i KEY as needed
-rsync -az --exclude .venv --exclude .venv-vllm --exclude data ./ $POD:~/DataMate-ZAIC2026/
+rsync -az --exclude /.venv --exclude /.venv-vllm --exclude /data --exclude /result --exclude /.env ./ $POD:~/DataMate-ZAIC2026/
 rsync -az data/train data/public_test $POD:~/DataMate-ZAIC2026/data/
 ```
 
@@ -23,6 +23,20 @@ rsync -az data/train data/public_test $POD:~/DataMate-ZAIC2026/data/
 cd ~/DataMate-ZAIC2026
 ./scripts/pod/setup.sh          # uv, project env, vLLM in .venv-vllm, weights in /models/target, ingest
 ```
+
+Disk used by the setup:
+
+| Item | Size |
+|---|---|
+| `Qwen/Qwen3-14B-FP8` weights (official FP8 checkpoint) | 16.3 GB |
+| vLLM env (`.venv-vllm`: vLLM, torch, CUDA libraries) | about 8 GB |
+| project env, data (train + public_test), ingest caches | about 1 GB |
+| vLLM / torch compile caches, logs, results | about 1 GB |
+| **Total** | **about 26 GB**; ask for 40 GB to keep headroom |
+
+The bf16 checkpoint (`MODEL_ID=Qwen/Qwen3-14B`, 29.6 GB) needs about 14 GB more. Docker builds for
+the rerun check (step 2 of the plan, on 2x RTX 5090) need about 50 GB more: the CUDA base image
+plus the weights baked into the image.
 
 `.env` on the pod:
 
@@ -42,8 +56,8 @@ WORK_DIR=/tmp/datamate
 
 ```bash
 export PATH=$PWD/.venv-vllm/bin:$PATH
-TP=1 QUANTIZATION=fp8 ./scripts/vllm.sh                 # A40, one GPU
-# TP=2 ./scripts/vllm.sh                                # 2x RTX 5090, bf16
+TP=1 ./scripts/vllm.sh                                 # A40, one GPU, FP8 checkpoint
+# TP=2 ./scripts/vllm.sh                                # 2x RTX 5090
 curl -s http://127.0.0.1:8001/v1/models                 # ready when this answers
 ```
 
@@ -75,7 +89,7 @@ compare: the two files should agree on almost every line (rule 8: |PA difference
 | Variable | Default | Use |
 |---|---|---|
 | `TP` | 2 | 1 on a single GPU |
-| `QUANTIZATION` | (bf16) | `fp8` to fit a 14B model plus KV cache on 48 GB or on one 5090 |
+| `QUANTIZATION` | (from the checkpoint) | `fp8` only with the bf16 checkpoint, to quantize when loading |
 | `KV_CACHE_DTYPE` | auto | `fp8` for more parallel requests |
 | `MAX_MODEL_LEN` | 49152 | longest prompt + `ANALYZE_MAX_TOKENS` |
 | `MAX_NUM_SEQS` | 16 | parallel requests in vLLM; keep ≥ `WORKERS` × 1 |

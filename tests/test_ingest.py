@@ -132,3 +132,14 @@ def test_grouped_export_fills_parent_cells_only():
     assert out["ma_don_hang"].tolist() == ["D1", "D1", "D2", "D3", "D3"]
     assert out["ngay_dat_hang"].tolist()[1] == "01/05/2025"
     assert out["ma_khach"].isna().tolist() == [False, False, True, False, False]
+
+
+def test_duplicate_lines_of_an_order_count_once():
+    from src.modules.ingest.clean import drop_duplicate_order_lines
+
+    lines = pd.DataFrame(
+        {"ma_hoa_don": ["H1", "H1", "H2"], "ten_hang": ["A", "A", "A"], "thanh_tien": [5, 5, 5]}
+    )
+    assert drop_duplicate_order_lines(lines)["ma_hoa_don"].tolist() == ["H1", "H2"]
+    log = pd.DataFrame({"ngay": ["01/05", "01/05"], "so_tien": [5, 5]})  # no order code: keep both
+    assert len(drop_duplicate_order_lines(log)) == 2

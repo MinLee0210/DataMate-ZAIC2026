@@ -225,3 +225,6 @@ data/*
 !data/README.md
 !data/.gitkeep
 result/
+
+# W&B local run files (scripts/devfree/wandb_report.py)
+wandb/

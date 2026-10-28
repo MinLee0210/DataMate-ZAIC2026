@@ -237,3 +237,11 @@ def test_export_submission(tmp_path, monkeypatch):
     pred.write_text(json.dumps({"id": "a", "type": "number", "answer": "3"}) + "\n")
     with pytest.raises(ValueError):
         export_submission(pred, "topic")
+
+
+def test_holdout_subset_takes_only_holdout_businesses():
+    from scripts.splits import HOLDOUT
+
+    business_of = {"q1": HOLDOUT[0], "q2": "biz_x", "q3": HOLDOUT[1]}
+    assert subset_ids(list(business_of), "holdout", business_of=business_of) == ["q1", "q3"]
+    assert len(subset_ids(list(business_of), "holdout1", business_of=business_of)) == 1
