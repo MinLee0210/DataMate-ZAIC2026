@@ -76,7 +76,7 @@ def test_ca_pipeline_answers_from_a_named_result(toy_split, tmp_path, monkeypatc
     answer, trace = service_for(toy_split, tmp_path, llm).answer(question())
     assert answer.type == "number" and isinstance(answer.value, int)
     kinds = [m["type"] for m in trace["messages"]]
-    assert kinds == ["thought", "progress", "thought", "data", "thought", "final"]
+    assert kinds == ["thought", "progress", "examples", "thought", "data", "thought", "final"]
     assert (
         "orders.ngay" in trace["messages"][1]["text"]
         and "rows after the as-of date" in trace["messages"][1]["text"]
@@ -167,3 +167,147 @@ def test_first_json_object_repairs_invalid_escapes():
 
     reply = r'{"sql": "SELECT regexp_matches(x, \'\d+\')", "ok": "a\\d"}'
     assert first_json_object(reply) == {"sql": r"SELECT regexp_matches(x, '\d+')", "ok": r"a\d"}
+
+
+def test_low_confidence_abstains_but_keeps_the_answer_for_the_tau_curve(
+    toy_split, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "min_confidence", 0.6)
+    final = {"thought": "?", "action": "final", "answer_type": "number", "data_result": "rev",
+             "confidence": 0.3}  # fmt: skip
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    assert answer.type == "abstain"
+    assert trace["top"]["type"] == "number" and trace["agreement"] == 0.3
+
+
+def test_confidence_above_the_gate_answers(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "min_confidence", 0.6)
+    final = {
+        "thought": "ok",
+        "action": "final",
+        "answer_type": "number",
+        "data_result": "rev",
+        "confidence": 85,
+    }  # fmt: skip  (0-100 read as a percent)
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    assert answer.type == "number" and trace["agreement"] == 0.85
+
+
+def test_unanswerable_without_evidence_gets_zero_confidence(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "min_confidence", 0.5)
+    final = {"thought": "?", "action": "final", "answer_type": "unanswerable", "reason": "no data",
+             "confidence": 0.9}  # fmt: skip
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    assert answer.type == "abstain" and trace["agreement"] == 0.0
+    final["evidence"] = "no column records the delivery date"
+    answer, _ = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    assert answer.type == "unanswerable"
+
+
+def test_a_failed_extra_query_earns_one_more_step(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "ca")
+    replies = iter(
+        [
+            {
+                "thought": "fix",
+                "action": "data_query",
+                "name": "bad",
+                "sql": "SELECT nope FROM orders",
+            },
+            {"thought": "fix again", "action": "data_query", "name": "good", "sql": "SELECT 7"},
+            {"thought": "ok", "action": "final", "answer_type": "number", "data_result": "good"},
+        ]
+    )
+    base = ca_replies({})
+    llm = FakeLLM(
+        lambda p: json.dumps(next(replies)) if "Reason over the results" in p else base(p)
+    )
+    answer, trace = service_for(toy_split, tmp_path, llm).answer(question())
+    assert answer.type == "number" and answer.value == 7
+    assert trace["llm_steps"] == 5
+    bad = [m for m in trace["messages"] if m.get("name") == "bad"][0]
+    assert "Columns of orders" in bad["error"]  # the hint lists the real columns
+
+
+@pytest.mark.parametrize(
+    "reply, action",
+    [
+        ({"action": "Final"}, "final"),
+        ({"answer_type": "number", "data_result": "rev"}, "final"),
+        ({"sql": "SELECT 1"}, "data_query"),
+        ({"code": "result = 1"}, "analysis"),
+        ({"reason": "not sure"}, ""),
+    ],
+)
+def test_infer_action(reply, action):
+    from src.services.qa.ca import infer_action
+
+    assert infer_action(reply) == action
+
+
+def test_example_store_masks_numbers_and_skips_the_asking_family():
+    from src.modules.context.examples import Example, ExampleStore, render_examples
+
+    def ex(i, biz, fam, q):
+        return Example(i, biz, fam, q, "number", f"SELECT {i}")
+
+    store = ExampleStore(
+        [
+            ex("a", "biz_1", "f1", "doanh thu tháng 5/2025 là bao nhiêu"),
+            ex("b", "biz_2", "f2", "doanh thu tháng 11/2026 là bao nhiêu"),
+            ex("c", "biz_3", "f3", "mặt hàng nào bán chạy nhất tuần rồi"),
+        ]
+    )
+    hits = store.search("doanh thu tháng 2/2026 bao nhiêu", "biz_9", k=2)
+    assert [h.id for h in hits] == ["a", "b"]  # numbers masked: both months match equally
+    assert [h.id for h in store.search("doanh thu tháng 2/2026", "biz_1", k=3)] == ["b"]
+    assert "SELECT a" in render_examples(hits)
+    assert ExampleStore([]).search("x", "biz_1") == []
+
+
+def test_self_consistency_votes_over_approaches(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "ca_samples", 3)
+    monkeypatch.setattr(settings, "ca_min_agreement", 0.6)
+    # the third approach ("Verify independently") picks a different query result
+    replies = []
+
+    def reply(prompt):
+        if "first step: reason over the schema" in prompt:
+            return json.dumps({"thought": "t", "sample_fields": []})
+        if "plan the data queries" in prompt:
+            sql = "SELECT 9" if "Verify independently" in prompt else "SELECT 5"
+            return json.dumps({"thought": "q", "data_queries": [{"name": "r", "sql": sql}]})
+        replies.append(prompt)
+        return json.dumps(
+            {"thought": "ok", "action": "final", "answer_type": "number", "data_result": "r"}
+        )
+
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert answer.type == "number" and answer.value == 5
+    assert trace["agreement"] == round(2 / 3, 4) and len(trace["samples"]) == 3
+    monkeypatch.setattr(settings, "ca_min_agreement", 0.9)
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert answer.type == "abstain" and trace["top"]["value"] == 5
+
+
+def test_money_answers_are_rounded_to_whole_vnd_in_the_pipeline(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "ca")
+
+    def reply(prompt):
+        if "first step: reason over the schema" in prompt:
+            return json.dumps({"thought": "t", "sample_fields": []})
+        if "plan the data queries" in prompt:
+            return json.dumps(
+                {"thought": "q", "data_queries": [{"name": "avg", "sql": "SELECT 169724.73"}]}
+            )
+        return json.dumps(
+            {"thought": "ok", "action": "final", "answer_type": "number", "data_result": "avg"}
+        )
+
+    # "doanh thu" is a money question: an average order value is money, whole VND
+    answer, _ = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert answer.value == 169725

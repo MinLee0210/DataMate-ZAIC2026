@@ -161,6 +161,9 @@ def test_batch_with_workers_writes_each_question_once(toy_split, tmp_path, monke
     assert all(line == {"id": line["id"], "type": "number", "answer": 3} for line in lines)
     traces = (settings.work_dir / "trace.jsonl").read_text().splitlines()
     assert len(traces) == 2
+    logs = [json.loads(x) for x in (out / "logs" / "questions.jsonl").read_text().splitlines()]
+    assert sorted(x["id"] for x in logs) == ["q1", "q2"]
+    assert all({"answer", "seconds", "trace"} <= set(x) for x in logs)
 
 
 def test_analysis_step_reaches_every_candidate(toy_split, tmp_path, monkeypatch):

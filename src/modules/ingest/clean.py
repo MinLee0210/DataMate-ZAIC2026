@@ -86,6 +86,13 @@ def frame_from_raw(raw: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
 _ID_LIKE = re.compile(r"(^|_)(ma|so|id|code|no|stt)(_|$)")
 
 
+def _mostly_numeric(values: pd.Series) -> bool:
+    values = values.dropna()
+    if values.empty:
+        return False
+    return values.map(lambda v: parse_number(v) is not None).mean() >= PARSE_THRESHOLD
+
+
 def fill_grouped_rows(frame: pd.DataFrame) -> pd.DataFrame:
     """Fill the blank parent cells of a grouped export (one order header, several line rows).
 
@@ -119,6 +126,11 @@ def fill_grouped_rows(frame: pd.DataFrame) -> pd.DataFrame:
         ]
         if not dated:
             continue
+        # money and quantities stay on the first line only: filling an order total down to every
+        # line makes a sum over lines count it once per line
+        cols = [
+            c for c in cols if not _mostly_numeric(frame[c][~pd.Series(mask, index=frame.index)])
+        ]
         frame = frame.copy()
         frame[cols] = frame[cols].mask(blank[cols]).ffill()
     return frame

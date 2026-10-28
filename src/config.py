@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     analyze_extra_body: str = ""
     # thinking tokens count against max_tokens, so those calls get more room
     analyze_max_tokens: int = 16384
+    # dataAgent: answer only when the final step's self-reported confidence (0-1) reaches this.
+    # 0 = never gate. Chosen on dev200 from the PA-vs-tau curve (trace `agreement` = confidence).
+    min_confidence: float = 0.0
+    # dataAgent: solved train examples shown to the query step (0 = none); assets/examples/
+    few_shot_k: int = 3
+    # dataAgent self-consistency: runs per question, one approach each (ca_variants.md), majority
+    # vote; answer only when the majority share >= CA_MIN_AGREEMENT (chosen by scripts/calibrate)
+    ca_samples: int = 1
+    ca_min_agreement: float = 0.0
 
     # FINAL_MODE=1: competition inference, only a local LLM endpoint is allowed
     final_mode: bool = False

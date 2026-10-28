@@ -2,6 +2,128 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-28 - Self-consistency k=3 wins on dev200 (E1); public #3 uses it; E2 paused
+
+- E1, Qwen3.5-9B, dataAgent + thinking, no few-shot, dev200 in two halves:
+  - k=3: 144 right / 40 wrong / 16 abstain, PA **0.520**.
+  - k=1 (qwen35-9b-v2-dev200): PA 0.415.
+  - Right when answered: 78 %, up from 73 %.
+  - Cost: about 3x the time per question.
+- With k=3 the agreement between samples is a real signal, unlike self-reported confidence.
+  - `scripts/calibrate.py` picks tau 0.35 in all 4 folds.
+  - Development PA: 0.521 without the gate, 0.549 cross-fitted.
+  - Hold-out check: 0.517 without the gate, 0.586 at tau 0.35.
+- Why public #3 is k=3 + tau 0.35: it is the largest measured gain. A 1000-question k=3 run takes
+  about 95 min on 2x RTX 5090, which only fits before the 22:00 deadline if E2 stops.
+- E2 (k=1 over the rest of the development set) stopped after about 60 questions. It feeds
+  cross-fit calibration and few-shot examples; rerun it later, with k=3 now that k=3 is the
+  candidate.
+- Skill rules written locally from development-only errors, not yet synced or measured (E3):
+  - debt collected by payment date, without the checkout payment;
+  - effect of a price change;
+  - growth direction;
+  - status counts through `is_cancelled`;
+  - answer shape.
+
+## 2026-10-28 - Bake-off results; self-reported confidence is useless; self-consistency
+- From now on no hosted API: every run is a model on the GPU pod (user decision).
+- dev200, same code (ingest v7, confidence field, unanswerable evidence, query retries):
+  Qwen3.5-9B (thinking, `presence_penalty` 1.5) PA 0.415 (131/48/21, 73 % right when answering);
+  Gemma-4-12B (no thinking: with thinking it loops at temperature 0) 0.28 (118/62/20, 66 %).
+  Qwen3-14B-FP8 (older code) 0.43. Hold-out v1 numbers (0.645 / 0.505) leak and are not used.
+  **Qwen3.5-9B is the main model**: about Qwen3-14B's PA, 5B smaller, faster, cheap KV cache.
+- **Self-reported confidence does not separate right from wrong**: Qwen3.5 said 0.9 on 164 of
+  179 answers. Cross-fitted threshold: no gain (0.4085 -> 0.4014). The unanswerable-evidence rule
+  does help (Gemma 0.2465 -> 0.3169 cross-fitted). Keep MIN_CONFIDENCE at 0.05 (it only drops
+  evidence-less unanswerable).
+- **Self-consistency** (`CA_SAMPLES`, `CA_MIN_AGREEMENT`): the dataAgent loop runs once per
+  approach in `ca_variants.md` (direct; bottom-up from lines; independent pandas check), with
+  different seeds; the answer is the majority, `agreement` its share, gated by
+  CA_MIN_AGREEMENT. The vote pipeline did this with DeepSeek and reached 91 % right when
+  answering. Costs k times the time; measure k = 3 on the folds before using it.
+- Running: Qwen3.5-9B on the whole development set (2,131 questions, 4 family folds, two
+  replicas on the two GPUs, few-shot off) for cross-fitted calibration and few-shot examples.
+
+## 2026-10-28 - Evaluation protocol from another team's repo; hold-out v2; few-shot BM25
+- Read baond12/zalo-ai-challenge-2026-datamate (stage A only: audit, splits, scorer; no agent,
+  no score; dev box 1x P100 with a 2,048-token context). Adopted their protocol ideas:
+  - **Hold-out by schema family** (`scripts/splits.py`). Several businesses share one export
+    template; hold-out v1 (biz_102, 106, 114, 120, 125, 130) had family members in development
+    for 4 of 6 businesses. v2 holds out whole families: biz_102, 103, 104, 121, 122 (one
+    template across grocery, cafe, pharmacy), biz_117, biz_129, biz_125; 869 questions, all five
+    sectors. Families: any transaction table (6+ columns, 1,000+ rows) with Jaccard >= 0.8.
+  - **Family-grouped folds** (4) over development and **sector subsets** (`--subset fold2`,
+    `sector:pharmacy`, `development200`, `holdout200`).
+  - **Cross-fitted threshold** (`scripts/calibrate.py`): MIN_CONFIDENCE is chosen on the other
+    folds and scored on the held fold, so the reported PA is not in-sample. Self-reported
+    confidence is a score to threshold, not a probability.
+  - **Hold-out exposure log** (`docs/holdout_exposure.md`); v2 is "seen format" because its
+    businesses were in dev200 error analysis before; no more error analysis on them.
+  - Not adopted: stdlib-only ingest without cleaning, P100 / 2,048-token settings.
+- **Few-shot examples** (`modules/context/examples.py`, `FEW_SHOT_K`, default 3): BM25 over
+  folded questions with numbers masked; verified train SQL only (answer matched the reference),
+  never hold-out businesses, never the asking business's family. Built by
+  `scripts/datagen/build_examples.py` from eval traces; 101 examples so far.
+- `docs/submission_log.md`: every public upload, one change per upload from now on.
+- Qwen3.5-9B with `presence_penalty` 1.5 (thinking): 2 failed questions in the first 60 instead
+  of 16; the greedy thinking loops are mostly gone.
+
+## 2026-10-28 - Public leaderboard: DeepSeek 0.104, Qwen3-14B -0.411; ingest v7; confidence gate
+- Leaderboard PA on public_test (1000 questions):
+  - deepseek-flash, dataAgent with thinking, ingest v7: **+0.104** (902 answered, 98 abstain,
+    21 unanswerable: about 503 right, 399 wrong, 56 % right when answering). First positive score.
+    Run on the hosted API at the user's request (like the earlier exception), 48 threads, 13 min.
+  - Qwen3-14B-FP8 on 2x RTX 5090, same pipeline, ingest v5: **-0.411** (875 answered, 125 abstain,
+    82 unanswerable: about 232 right, 643 wrong, 27 % right). On train dev200 the same model is
+    right 73 % of the time when it answers.
+  - So the pipeline works on public data with a stronger model; Qwen3-14B's gap is the model on
+    new businesses (plus the two ingest bugs below that the DeepSeek run already had fixed).
+- Ingest version 7, two bugs that only hurt public_test:
+  - Split tables were merged by month number only (`banhang_t1` = T1/2025 + T1/2026,
+    `banhang_t10_2025` separate): the base name now drops period tokens (`_t1`, `_thang05`,
+    `_m3`, `_q2`), so dev_002 and dev_005 have one `banhang` table.
+  - The fill-down also filled order-level money (`tong_phieu`, dev_004: 18,138 cells), so a sum
+    over lines counted each order total once per line. Numeric columns are no longer filled.
+- dataAgent (not measured yet):
+  - The final step reports `confidence` (0-1). The trace records it as `agreement`, so the eval
+    draws PA vs tau; `MIN_CONFIDENCE` gates answers (default 0 until chosen on dev200).
+  - "unanswerable" must give `evidence` (the missing concept or the period with the data's first
+    and last date); without it, its confidence is 0.
+  - Query retries: a failed query's error lists the columns of the tables it named (no LLM); a
+    failed extra query earns one more step (at most 5 LLM steps, only when queries fail: about
+    3.5 % of public questions); a non-JSON reply in steps 1-2 is asked again once.
+- Docker requirements read from the portal's Data tab: `predict.sh` (added at the repo root) and
+  per-question logs in `/result/logs/` (now `<out>/logs/questions.jsonl`: id, answer, seconds,
+  question, full trace).
+- Model bake-off on dev200 (same code as the DeepSeek public run): Qwen3.5-9B with thinking runs
+  well; Gemma-4-12B with thinking at temperature 0 loops until the 10,240-token cap on 14 of 16
+  questions, so it is measured with thinking off.
+
+## 2026-10-28 - Qwen3 on dev200: right more often, but rarely abstains; fixes for its 50 errors
+- dev200 on 2x RTX 5090, Qwen3-14B-FP8, dataAgent with thinking, ingest v5 and today's fixes:
+  PA 0.43 (136 right / 50 wrong / 14 abstain), 73 % right when it answers. deepseek-flash, same
+  pipeline before today's fixes: PA 0.55 (122 / 12 / 66), 91 %. Qwen3 gets more right (40 that
+  DeepSeek skipped) but answers almost everything, so its 50 wrong answers cost more than the
+  extra right ones give: a calibration problem, not a solving one.
+- The 50 wrong (train, gold known), by cause: money not rounded to whole VND (4: ROUND(x, 2) on an
+  average order value); one spelling of a status or of the walk-in customer (about 5: a cancel
+  count of 0 with `hủy đơn` and `Đã hủy đơn` in the data; "kl", "lẻ" ranked as top customers);
+  unit or scale (about 7: percent 0.66 for 66.01, price per pill vs per box, sum vs average);
+  answer shape (4: a table for a list); wrong unanswerable (5); revenue or period off by 1-15 %
+  (about 12); question misread (about 8: "số bill" as money, ×19, ×99).
+- Fixes (not measured yet):
+  - Number answers to money questions are rounded to whole VND, half up
+    (`utils.format.is_money_question`, `round_money`, applied in the dataAgent final step).
+  - Semantic layer macros in every database (`assets/semantic/text_and_status.sql`): `fold`,
+    `is_cancelled`, `is_returned`, `is_walk_in`, for every spelling of a status and of a walk-in
+    customer ("hoàn thành" is not a return). The loader used to drop a statement with a comment
+    above it, so these are the first statements it ever created. Ingest version 6.
+  - business-metrics skill: the macros, units and prices, percent in points, counts of bills.
+  - The results prompt checks unit and scale, spellings, shape and plausibility one by one and
+    abstains when a check fails.
+- Next: dev200 again on the pod with these fixes; then work on abstention (a second, independent
+  check of the final answer) if wrong answers stay high.
+
 ## 2026-10-28 - First target-model run (A40), stopped at 137/1000; fixes from it
 - public_test on Qwen3-14B-FP8, vLLM 0.32 on 1x A40, dataAgent with thinking, 12 workers. Stopped
   at 137 questions (the user moved to 2x RTX 5090). Files: data/results/2026-10-28/

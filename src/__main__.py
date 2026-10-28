@@ -1,7 +1,10 @@
 """Batch inference: python -m src --data /data --out /result [--workers N]
 
 Writes one line per question to <out>/submission.jsonl, flushed as soon as it is decided, so a
-timeout keeps every answer written so far. A per-question trace goes to $WORK_DIR/trace.jsonl.
+timeout keeps every answer written so far. A per-question log goes to <out>/logs/questions.jsonl
+(the competition asks for /result/logs/: id, final answer, elapsed time, and how the answer was
+reached: thoughts, generated SQL and Python, execution results, errors). The same trace also
+goes to $WORK_DIR/trace.jsonl for scripts/eval.py.
 
 With --workers N (default WORKERS, 1) questions run on N threads. Every business is ingested
 first, one at a time, so no two threads build the same cache. Each thread then has its own
@@ -101,9 +104,11 @@ def main(argv: list[str] | None = None) -> int:
     lock = threading.Lock()
     counter = {"n": 0}
 
+    (args.out / "logs").mkdir(parents=True, exist_ok=True)
     with (
         submission.open("a", encoding="utf-8") as out,
         (settings.work_dir / "trace.jsonl").open("a", encoding="utf-8") as traces,
+        (args.out / "logs" / "questions.jsonl").open("a", encoding="utf-8") as question_log,
     ):
 
         def run(question: Question) -> None:
@@ -121,6 +126,17 @@ def main(argv: list[str] | None = None) -> int:
             with lock:
                 _append(out, line.record())
                 _append(traces, trace)
+                _append(
+                    question_log,
+                    {
+                        "id": question.id,
+                        "answer": line.record(),
+                        "seconds": trace["seconds"],
+                        "question": question.question,
+                        "as_of_date": str(question.as_of_date),
+                        "trace": trace,
+                    },
+                )
                 counter["n"] += 1
                 if counter["n"] % 20 == 0:
                     logger.info(

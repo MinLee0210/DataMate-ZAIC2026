@@ -15,7 +15,8 @@ DEFAULT_SKILLS = [
     "unanswerable",
     "messy-data",
 ]
-_DECODER = json.JSONDecoder()
+# strict=False: a raw newline inside a string (multi-line SQL) is read, not rejected
+_DECODER = json.JSONDecoder(strict=False)
 # a JSON escape (group 1), or a backslash followed by any other character (group 2)
 _ESCAPE = re.compile(r'\\(["\\/bfnrt]|u[0-9a-fA-F]{4})|\\(.)', re.DOTALL)
 # a thinking block, closed or cut off by max_tokens (then it runs to the end of the reply)

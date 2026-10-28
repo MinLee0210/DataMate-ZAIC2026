@@ -172,3 +172,43 @@ def test_subtotal_and_repeated_header_rows_are_dropped():
     )
     out = drop_subtotal_rows(drop_repeated_headers(frame, ["Khách", "Mã đơn", "Tiền"]))
     assert out["khach"].tolist() == ["Tong Ngoc Chi", "An"]
+
+
+def test_semantic_status_and_walk_in_macros():
+    from src.modules.semantic import apply_semantic_layer
+
+    conn = duckdb.connect()
+    assert {"fold", "is_cancelled", "is_returned", "is_walk_in"} <= set(apply_semantic_layer(conn))
+
+    def ask(sql, value):
+        return conn.execute(sql, [value]).fetchone()[0]
+
+    assert all(ask("select is_cancelled(?)", s) for s in ["Huỷ đơn", "hủy đơn", "khách hủy"])
+    assert all(ask("select is_returned(?)", s) for s in ["Đổi trả", "hàng trả về", "Đã hoàn hàng"])
+    assert not ask("select is_returned(?)", "Đã hoàn thành")
+    assert all(ask("select is_walk_in(?)", s) for s in ["khách lẻ", "kl", "lẻ", None])
+    assert not ask("select is_walk_in(?)", "Lê Văn Kl")
+
+
+def test_monthly_tables_merge_into_one_base_name():
+    from src.modules.ingest.readers import _base_name
+
+    names = ["banhang_t10_2025", "banhang_t1", "banhang_thang05", "banhang_thang06_2025"]
+    assert {_base_name(n) for n in names} == {"banhang"}
+    assert _base_name("donhang_chitiet_2026__t06_2026") == "donhang_chitiet"
+
+
+def test_grouped_export_does_not_fill_order_money_down():
+    from src.modules.ingest.clean import fill_grouped_rows
+
+    frame = pd.DataFrame(
+        {
+            "ma_don": ["D1", None, None, "D2"],
+            "thoi_gian": ["01/05/2025", None, None, "02/05/2025"],
+            "tong_phieu": ["300000", None, None, "50000"],  # order total, first line only
+            "ten_hang": ["A", "B", "C", "D"],
+        }
+    )
+    out = fill_grouped_rows(frame)
+    assert out["ma_don"].tolist() == ["D1", "D1", "D1", "D2"]
+    assert out["tong_phieu"].isna().tolist() == [False, True, True, False]

@@ -21,7 +21,10 @@ if [[ -z "${LLM_EXTRA_BODY:-}" ]]; then
   export LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'
 fi
 export PIPELINE="${PIPELINE:-ca}"
-export ANALYZE_EXTRA_BODY="${ANALYZE_EXTRA_BODY-{\"chat_template_kwargs\": {\"enable_thinking\": true}}}"
+# default only when unset (a "${VAR-default}" with braces in the default corrupts a set value)
+if [[ -z "${ANALYZE_EXTRA_BODY+set}" ]]; then
+  export ANALYZE_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": true}}'
+fi
 export ANALYZE_MAX_TOKENS="${ANALYZE_MAX_TOKENS:-10240}"
 export WORKERS="${WORKERS:-8}"
 

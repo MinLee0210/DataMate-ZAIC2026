@@ -7,6 +7,7 @@ from src.data.duckdb import DuckDBSource
 from src.models import Answer, Question
 from src.modules.agents.sql_agent import SQLAgent
 from src.modules.context import render_schema_card
+from src.modules.context.examples import ExampleStore
 from src.services.ingest import BusinessContext, IngestService
 from src.services.qa.ca import CAPipeline
 from src.services.qa.graph import build_qa_graph
@@ -61,6 +62,11 @@ class QAService:
                 lunar=lunar,
                 extra_body=settings.analyze_body,
                 max_tokens=settings.analyze_max_tokens,
+                min_confidence=settings.min_confidence,
+                examples=ExampleStore.load() if settings.few_shot_k > 0 else None,
+                few_shot_k=settings.few_shot_k,
+                samples=settings.ca_samples,
+                min_agreement=settings.ca_min_agreement,
             )
             if settings.pipeline == "ca"
             else None

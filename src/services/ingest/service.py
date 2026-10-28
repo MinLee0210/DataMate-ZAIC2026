@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 CALENDAR_TABLE = "lunar_calendar"
 # part of the cache key: bump it when ingest output changes, so old caches are rebuilt
-INGEST_VERSION = "5"
+INGEST_VERSION = "7"
 
 
 @dataclass

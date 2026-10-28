@@ -139,11 +139,13 @@ def _source_year(source: str) -> int | None:
 
 
 SOURCE_COLUMN = "nguon"
-_SPLIT_SUFFIX = re.compile(r"(_\d+)+$")
+# trailing part / period tokens of a split file: _1, _2026, _t1, _t01_2025, _thang05, _m3, _q2
+_SPLIT_SUFFIX = re.compile(r"(_(t|th|thang|m|q|quy|p|part)?\d+)+$")
 
 
 def _base_name(name: str) -> str:
-    """'donhang_chitiet_1__t01_2025' -> 'donhang_chitiet': sheet and numeric file suffixes off."""
+    """'donhang_chitiet_1__t01_2025' -> 'donhang_chitiet', 'banhang_t10_2025' -> 'banhang',
+    'banhang_thang05' -> 'banhang': sheet names and part or period suffixes off."""
     return _SPLIT_SUFFIX.sub("", name.split("__", 1)[0]) or name
 
 

@@ -17,6 +17,8 @@ from typing import Any
 
 import pandas as pd
 
+from src.utils.text import fold
+
 _MONTH = re.compile(r"^\d{4}-\d{2}$")
 _TRUE = {"true", "1", "yes", "co", "có", "đúng", "dung", "t"}
 _FALSE = {"false", "0", "no", "khong", "không", "sai", "f"}
@@ -107,3 +109,25 @@ def format_result(answer_type: str, frame: pd.DataFrame) -> Any:
     if answer_type == "string":
         return str(value).strip()
     raise FormatError(f"unknown answer type {answer_type!r}")
+
+
+# money words, folded (utils.text.fold): a number answer to such a question is whole VND
+_MONEY = re.compile(
+    r"\b(tien|doanh thu|dthu|doanh so|gia|chi phi|loi nhuan|lai gop|lai rong|von|no|cong no"
+    r"|vnd|dong tien|thu ve|ban duoc bao nhieu tien)\b"
+)
+# questions that ask for a count or a quantity, even when a money word appears ("số đơn", "mấy ly")
+_COUNT = re.compile(
+    r"\b(so don|bao nhieu don|may don|so bill|so luong|bao nhieu ly|may ly|so khach)\b"
+)
+
+
+def is_money_question(question: str) -> bool:
+    """Rulebook §9: money is whole VND, and an average of money is money too."""
+    text = fold(question)
+    return bool(_MONEY.search(text)) and not _COUNT.search(text)
+
+
+def round_money(value: int | float) -> int:
+    """Whole VND, half up (rulebook §3: nửa đồng làm tròn lên)."""
+    return int(Decimal(str(value)).quantize(Decimal("1"), rounding="ROUND_HALF_UP"))

@@ -16,6 +16,7 @@ because a wrong answer costs a point. Every step is kept in the trace as a CA-sh
 """
 
 import json
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -24,15 +25,17 @@ from datetime import date
 import pandas as pd
 
 from src.data.duckdb import DuckDBSource
-from src.models import VALUE_TYPES, Answer
+from src.models import VALUE_TYPES, Answer, SchemaCard
 from src.modules.agents.sql_agent import PlanParseError, SQLAgent
+from src.modules.context.examples import ExampleStore, render_examples
 from src.modules.context.sampling import sample_fields
+from src.modules.decide import Candidate, vote_key
 from src.modules.python_exec import run_python
 from src.services.ingest import BusinessContext
 from src.services.qa.graph import build_context
 from src.utils import get_logger
 from src.utils.assets import load_prompt_template
-from src.utils.format import format_result
+from src.utils.format import format_result, is_money_question, round_money
 from src.utils.timeparse import LunarCalendar
 
 logger = get_logger(__name__)
@@ -115,6 +118,49 @@ def resolve_result(results: dict[str, DataResult], ref: object) -> DataResult | 
     return usable[0] if len(usable) == 1 else None
 
 
+def error_hint(code: str, card: SchemaCard | None, max_columns: int = 60) -> str:
+    """Columns (and types) of the tables a failed query names, so the retry can use real names.
+    Deterministic, no LLM; empty when the query names no known table."""
+    if card is None:
+        return ""
+    lowered = code.lower()
+    lines = []
+    for table in card.tables:
+        if re.search(rf"\b{re.escape(table.name.lower())}\b", lowered):
+            cols = ", ".join(f"{c.name} ({c.dtype})" for c in table.columns[:max_columns])
+            lines.append(f"Columns of {table.name}: {cols}")
+    if not lines:
+        tables = ", ".join(t.name for t in card.tables)
+        lines.append(f"Tables: {tables}")
+    return "\nHint: " + "\n".join(lines)
+
+
+def infer_action(reply: dict) -> str:
+    """The reply's action; when a model leaves `action` out (Gemma 4 does), it is read from the
+    fields it did give: answer_type -> final, sql -> data_query, code -> analysis."""
+    action = str(reply.get("action", "")).strip().lower()
+    if action:
+        return action
+    if reply.get("answer_type"):
+        return "final"
+    if reply.get("sql"):
+        return "data_query"
+    if reply.get("code"):
+        return "analysis"
+    return ""
+
+
+def _confidence(value: object) -> float | None:
+    """The final step's confidence in [0, 1]; 0-100 is read as a percent; None when missing."""
+    try:
+        x = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if x > 1.0:
+        x /= 100.0
+    return min(max(x, 0.0), 1.0)
+
+
 class CAPipeline:
     def __init__(
         self,
@@ -127,6 +173,11 @@ class CAPipeline:
         lunar: LunarCalendar | None = None,
         extra_body: dict | None = None,
         max_tokens: int | None = None,
+        min_confidence: float = 0.0,
+        examples: ExampleStore | None = None,
+        few_shot_k: int = 0,
+        samples: int = 1,
+        min_agreement: float = 0.0,
     ) -> None:
         self.agent = agent
         self.seed = seed
@@ -136,15 +187,30 @@ class CAPipeline:
         self.lunar = lunar
         self.extra_body = extra_body
         self.max_tokens = max_tokens
+        self.min_confidence = min_confidence
+        self.examples = examples
+        self.few_shot_k = few_shot_k
+        self.samples = max(1, samples)
+        self.min_agreement = min_agreement
+        self.variants = [v.strip() for v in load_prompt_template("ca_variants").split("\n---\n")]
+        self._sample = 0
 
     def _think(self, template: str, values: dict[str, str], step: int) -> dict:
         return self.agent.think(
             template,
             values,
-            seed=self.seed + step,
+            seed=self.seed + step + 1000 * self._sample,
             extra_body=self.extra_body,
             max_tokens=self.max_tokens,
         )
+
+    def _think_or_retry(self, template: str, values: dict[str, str], step: int) -> dict:
+        """One reasoning step; a non-JSON reply is asked again once, with the error."""
+        try:
+            return self._think(template, values, step)
+        except PlanParseError as e:
+            note = f"\n\n(Your previous reply could not be read: {e}. Reply with one JSON object.)"
+            return self._think(template, {**values, "question": values["question"] + note}, step)
 
     def _run(
         self,
@@ -154,6 +220,7 @@ class CAPipeline:
         question: str,
         language: str,
         code: str,
+        card: SchemaCard | None = None,
     ) -> DataResult:
         name = (str(name).strip() or f"result_{len(results) + 1}").replace(" ", "_")
         while name in results:
@@ -171,12 +238,57 @@ class CAPipeline:
                     timeout_s=self.sql_timeout_s,
                 )
         except Exception as e:  # recoverable: shown to the next THOUGHT
-            result.error = f"{type(e).__name__}: {e}"
+            result.error = f"{type(e).__name__}: {e}" + error_hint(result.code, card)
         results[name] = result
         return result
 
     def run(
         self, question: str, as_of: date, business: BusinessContext, source: DuckDBSource
+    ) -> tuple[Answer, dict]:
+        """One answer; with samples > 1, self-consistency: the loop runs once per approach
+        (`ca_variants.md`) and the answer is the majority. `agreement` = majority share, which
+        the eval's PA-vs-tau curve and `scripts/calibrate.py` use; MIN_AGREEMENT gates it."""
+        if self.samples == 1:
+            self._sample = 0
+            return self._run_once(question, as_of, business, source, self.variants[0])
+        runs = []
+        for i in range(self.samples):
+            self._sample = i
+            approach = self.variants[i % len(self.variants)]
+            runs.append(self._run_once(question, as_of, business, source, approach))
+        votes: dict[str, list[Answer]] = {}
+        for answer, _ in runs:
+            if answer.type != "abstain":
+                key = vote_key(Candidate(answer.type, answer.value))
+                votes.setdefault(key, []).append(answer)
+        top = max(votes.values(), key=len)[0] if votes else None  # first-seen wins ties
+        agreement = round(max(map(len, votes.values())) / self.samples, 4) if votes else 0.0
+        final = (
+            top if top is not None and agreement >= self.min_agreement else Answer(type="abstain")
+        )
+        timings: dict[str, float] = {}
+        for _, t in runs:
+            for k, v in t["timings"].items():
+                timings[k] = round(timings.get(k, 0.0) + v, 4)
+        trace = {
+            "pipeline": "ca",
+            "samples": [t for _, t in runs],
+            "votes": {k: len(v) for k, v in votes.items()},
+            "messages": runs[0][1]["messages"],
+            "llm_steps": sum(t["llm_steps"] for _, t in runs),
+            "timings": timings,
+            "top": top.model_dump() if top is not None else None,
+            "agreement": agreement,
+        }
+        return final, trace
+
+    def _run_once(
+        self,
+        question: str,
+        as_of: date,
+        business: BusinessContext,
+        source: DuckDBSource,
+        approach: str,
     ) -> tuple[Answer, dict]:
         timings: dict[str, float] = {}
         messages: list[dict] = []
@@ -186,11 +298,12 @@ class CAPipeline:
 
         started = time.perf_counter()
         ctx = build_context(question, as_of, business, self.schema_text, self.lunar)
+        ctx["approach"] = approach
         timed("schema", started)
 
         # THOUGHT 1: reason over the schema
         started = time.perf_counter()
-        step1 = self._think("ca_schema_thought", ctx, step=1)
+        step1 = self._think_or_retry("ca_schema_thought", ctx, step=1)
         thought = str(step1.get("thought", "")).strip()
         messages.append({"type": "thought", "step": 1, "text": thought})
         timed("thought_schema", started)
@@ -204,7 +317,17 @@ class CAPipeline:
 
         # THOUGHT 2 + DATA: named data queries
         started = time.perf_counter()
-        step2 = self._think("ca_data_queries", {**ctx, "thought": thought, "samples": samples}, 2)
+        shots = (
+            self.examples.search(question, business.business_id, self.few_shot_k)
+            if self.examples is not None
+            else []
+        )
+        messages.append({"type": "examples", "ids": [e.id for e in shots]})
+        step2 = self._think_or_retry(
+            "ca_data_queries",
+            {**ctx, "thought": thought, "samples": samples, "examples": render_examples(shots)},
+            2,
+        )
         thought2 = str(step2.get("thought", "")).strip()
         messages.append({"type": "thought", "step": 2, "text": thought2})
         timed("thought_queries", started)
@@ -214,17 +337,19 @@ class CAPipeline:
             if isinstance(query, dict) and query.get("sql"):
                 self._run(
                     source, results, query.get("name", ""), query.get("question", ""), "sql",
-                    query["sql"],
+                    query["sql"], business.card,
                 )  # fmt: skip
         messages += [r.message() for r in results.values()]
         timed("data", started)
         thoughts = "\n\n".join(t for t in (thought, thought2) if t)
         notes: list[str] = []
 
-        # THOUGHT 3 (and 4): reason over the results
+        # THOUGHT 3 (and 4, and 5 only after a failed extra query): reason over the results
         answer, reason = Answer(type="abstain"), "no final answer"
-        for step in (3, 4):
-            last = step == 4
+        confidence: float | None = None
+        extra_failed = False
+        for step in (3, 4, 5):
+            last = step == 5 or (step == 4 and not extra_failed)
             started = time.perf_counter()
             data = "\n\n".join([r.render() for r in results.values()] + notes) or "(no results)"
             actions = load_prompt_template("ca_actions_final" if last else "ca_actions_more")
@@ -244,9 +369,10 @@ class CAPipeline:
                 if last:
                     reason = f"bad reply: {e}"
                     break
+                extra_failed = True  # a bad reply also earns the extra step
                 continue
             timed("thought_results", started)
-            action = str(reply.get("action", "")).strip().lower()
+            action = infer_action(reply)
             text = str(reply.get("thought", "")).strip()
             thoughts += "\n\n" + text
             message = {"type": "thought", "step": step, "text": text, "action": action}
@@ -258,8 +384,11 @@ class CAPipeline:
 
             if action == "final":
                 answer_type = str(reply.get("answer_type", "")).strip().lower()
+                confidence = _confidence(reply.get("confidence"))
                 if answer_type == "unanswerable":
                     answer, reason = Answer(type="unanswerable"), str(reply.get("reason", ""))
+                    if not str(reply.get("evidence", "")).strip():
+                        confidence = 0.0  # unanswerable needs the missing column or period
                     break
                 result = resolve_result(results, reply.get("data_result"))
                 problem = None
@@ -269,15 +398,18 @@ class CAPipeline:
                     problem = f"no usable result named {reply.get('data_result')!r}"
                 else:
                     try:
-                        answer = Answer(
-                            type=answer_type, value=format_result(answer_type, result.frame)
-                        )
+                        value = format_result(answer_type, result.frame)
+                        if answer_type == "number" and is_money_question(question):
+                            value = round_money(value)  # rulebook §9: money is whole VND
+                        answer = Answer(type=answer_type, value=value)
                         reason = f"from {result.name}"
                         break
                     except Exception as e:
                         problem = f"{type(e).__name__}: {e}"
                 notes.append(f"### Error in the final answer\n{problem}")
                 messages.append({"type": "error", "step": step, "text": problem})
+                if last:
+                    break
                 continue
             if action in ("analysis", "data_query") and not last:
                 started = time.perf_counter()
@@ -289,13 +421,19 @@ class CAPipeline:
                     reply.get("question", ""),
                     language,
                     reply.get("code" if language == "python" else "sql", ""),
+                    business.card,
                 )
+                extra_failed = result.error is not None
                 messages.append(result.message())
                 timed("analysis" if language == "python" else "data", started)
                 continue
             reason = str(reply.get("reason", "")) or f"action {action!r}"
             break
 
+        top = answer if answer.type != "abstain" else None
+        score = 1.0 if confidence is None else confidence
+        if top is not None and score < self.min_confidence:
+            answer, reason = Answer(type="abstain"), f"confidence {score} < {self.min_confidence}"
         messages.append(
             {"type": "final", "answer": answer.model_dump(), "reason": reason}
         )  # fmt: skip
@@ -304,7 +442,9 @@ class CAPipeline:
             "messages": json.loads(json.dumps(messages, ensure_ascii=False, default=str)),
             "llm_steps": sum(1 for m in messages if m["type"] == "thought"),
             "timings": {k: round(v, 4) for k, v in timings.items()},
-            "top": answer.model_dump() if answer.type != "abstain" else None,
-            "agreement": 1.0 if answer.type != "abstain" else 0.0,
+            # for the PA-vs-tau curve: the answer before the confidence gate, and its confidence
+            "top": top.model_dump() if top is not None else None,
+            "agreement": score if top is not None else 0.0,
+            "confidence": confidence,
         }
         return answer, trace

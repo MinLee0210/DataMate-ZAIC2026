@@ -18,7 +18,16 @@ a point and no answer costs nothing: give a final answer only when you believe i
 ## Data queries and results
 {{data}}
 
-Check the results against the question and the rulebook: the time range and the as-of rule,
+Check these one by one, and abstain when one fails and you cannot fix it:
+- Unit and scale: the unit the question asks for (hộp vs viên, VND), percent in points (66.01 not
+  0.66), a count vs an amount.
+- Spellings: statuses and walk-in customers matched with `is_cancelled`, `is_returned`,
+  `is_walk_in`, not one spelling. A count or share of 0 usually means a missed spelling.
+- Shape: a list question gets one column in the asked order; "so sánh A với B" gets the numbers
+  in the order A, B; a table only when the question asks for several columns.
+- Plausibility: compare the order of magnitude with the sampled values (×10, ×100, ×1000 errors).
+
+Also check the results against the question and the rulebook: the time range and the as-of rule,
 valid records, the measure's definition and unit, the objects, ranking direction, tie-break by
 code and top-k, rounding and answer type, and plausibility (empty or NULL results, impossible
 signs or magnitudes, 0 vs. "no data"). An error from a query is recoverable: fix it or try

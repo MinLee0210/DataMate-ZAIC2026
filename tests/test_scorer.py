@@ -245,3 +245,17 @@ def test_holdout_subset_takes_only_holdout_businesses():
     business_of = {"q1": HOLDOUT[0], "q2": "biz_x", "q3": HOLDOUT[1]}
     assert subset_ids(list(business_of), "holdout", business_of=business_of) == ["q1", "q3"]
     assert len(subset_ids(list(business_of), "holdout1", business_of=business_of)) == 1
+
+
+def test_holdout_keeps_whole_schema_families_and_folds_do_too():
+    from scripts.splits import FAMILIES, HOLDOUT, SECTOR, dev_folds
+
+    for family in FAMILIES:
+        held = {b in HOLDOUT for b in family}
+        assert len(held) == 1, f"family split across hold-out and development: {family}"
+    covered = {SECTOR[b] for b in HOLDOUT}
+    assert {"grocery", "cafe", "pharmacy", "restaurant", "building_materials"} <= covered
+    folds = dev_folds({b: 100 for f in FAMILIES for b in f})
+    for family in FAMILIES:
+        if not set(family) & set(HOLDOUT):
+            assert len({folds[b] for b in family}) == 1

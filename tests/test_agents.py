@@ -71,3 +71,10 @@ def test_cut_off_thinking_is_not_parsed_as_the_answer():
 
     with pytest.raises(PlanParseError):
         first_json_object('<think>maybe reply {"action": "final", "x": 1} then check')
+
+
+def test_raw_newlines_inside_json_strings_are_read():
+    from src.modules.agents.sql_agent import first_json_object
+
+    reply = '{"name": "rev", "sql": "SELECT sum(x)\nFROM orders\nWHERE y = 1"}'
+    assert first_json_object(reply)["sql"] == "SELECT sum(x)\nFROM orders\nWHERE y = 1"

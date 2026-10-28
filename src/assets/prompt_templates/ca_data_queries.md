@@ -12,6 +12,9 @@ values.
 ## Entity matches
 {{entities}}
 
+## Approach
+{{approach}}
+
 ## Question
 {{question}}
 
@@ -20,6 +23,11 @@ values.
 
 ## Sampled values
 {{samples}}
+
+## Solved examples from other shops
+Verified queries for similar questions on other businesses. Their tables and columns are not this
+shop's: reuse the approach (filters, rulebook rule, grouping, rounding), never the names.
+{{examples}}
 
 Write 1 to 3 named data queries. Each is one read-only DuckDB `SELECT` (CTEs are fine) over the
 tables above. Make one query return exactly the answer when you can: computed, rounded and

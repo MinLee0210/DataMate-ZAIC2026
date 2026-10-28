@@ -19,6 +19,9 @@ This is the first step: reason over the schema. Do not write SQL yet.
 ## Entity matches (question text -> table.column = value)
 {{entities}}
 
+## Approach
+{{approach}}
+
 ## Question
 {{question}}
 

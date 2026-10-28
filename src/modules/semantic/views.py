@@ -18,7 +18,10 @@ SEMANTIC_DIR = Path(__file__).resolve().parents[2] / "assets" / "semantic"
 
 
 def _statements(text: str) -> list[str]:
-    return [s.strip() for s in text.split(";") if s.strip() and not s.strip().startswith("--")]
+    """SQL statements of a file; `--` comment lines are dropped (a comment above a statement
+    used to drop the statement too)."""
+    code = "\n".join(line for line in text.splitlines() if not line.strip().startswith("--"))
+    return [s.strip() for s in code.split(";") if s.strip()]
 
 
 def apply_semantic_layer(

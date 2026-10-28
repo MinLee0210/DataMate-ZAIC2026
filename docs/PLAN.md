@@ -4,6 +4,29 @@ Written 2026-10-26 for an agent picking up the work. Each task is self-contained
 steps, and a check that says when it is done. Do them in order within a milestone unless marked
 **parallel**. When a task is finished, tick it here and add a line to docs/NOTES.md.
 
+## Tonight (2026-10-28) after public #2, until 22:00: experiments to lift the score
+
+Agreed with the user: once public #1 (Qwen3.5-9B, k=1) and #2 (+ few-shot) are done, use the
+pod (2x RTX 5090, a Qwen3.5-9B replica per GPU) for as many experiments as fit. Pod only, no
+hosted API. Each experiment: one change, scored on development folds (never the hold-out v2),
+logged to W&B and NOTES.md; Google Chat ping every 100 questions and at the end.
+
+1. [ ] **Resume the train development folds** (k=1, few-shot off; 787 of 2,131 done, partial
+   traces in `/tmp/dm-fold*/trace.partial.jsonl`): cross-fitted threshold
+   (`scripts/calibrate.py`) and a bigger few-shot store (`scripts/datagen/build_examples.py`,
+   from about 100 to about 1,000 verified examples).
+2. [ ] **Self-consistency k=3** (`CA_SAMPLES=3`, sync the code to the pod first) on
+   `development200`: PA, wrong answers, abstentions, seconds per question; pick
+   `CA_MIN_AGREEMENT` by cross-fit. Expected: fewer wrong answers (the vote pipeline reached
+   91 % right when answering).
+3. [ ] **Few-shot with the bigger store** on `development200`, compared with #2's 101 examples.
+4. [ ] **Qwen3-14B-FP8 with today's code** (thinking + `presence_penalty`) on `development200`,
+   vs Qwen3.5-9B on the same questions.
+5. [ ] Speed knobs if time is short: thinking only in the results step; `ANALYZE_MAX_TOKENS`
+   6144; k=2 with early stop when the first two agree.
+6. [ ] If one change clearly beats #1/#2 on the folds: **public #3** with that change only
+   (`docs/submission_log.md`).
+
 ## Next session (2026-10-28): first run on a GPU pod
 
 The user provides a pod (A40, 48 GB) with its SSH config. Goal: the first legal public_test

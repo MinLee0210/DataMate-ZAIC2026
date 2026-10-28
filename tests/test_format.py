@@ -65,3 +65,32 @@ def test_list_and_table_keep_row_order():
 def test_shape_and_type_errors(answer_type, rows):
     with pytest.raises(FormatError):
         format_result(answer_type, frame(rows))
+
+
+@pytest.mark.parametrize(
+    "question, money",
+    [
+        ("Trung bình mỗi đơn tháng 4/2026 mang về bao nhiêu doanh thu?", True),
+        ("giá nhập bình quân một hộp Hapacol trong tháng 4", True),
+        ("tổng tiền khách còn nợ đến hết hôm nay", True),
+        ("tháng 3 có bao nhiêu đơn bị hủy", False),
+        ("còn lại mấy cục xà bông trong kho", False),
+        ("số đơn có doanh thu trên 1 triệu", False),
+        ("trung bình mỗi ngày bán bao nhiêu ly", False),
+    ],
+)
+def test_is_money_question(question, money):
+    from src.utils.format import is_money_question
+
+    assert is_money_question(question) is money
+
+
+def test_round_money_is_half_up_whole_vnd():
+    from src.utils.format import round_money
+
+    assert [round_money(v) for v in (169724.73, 37452.5, 1272114.06, -2.5)] == [
+        169725,
+        37453,
+        1272114,
+        -3,
+    ]

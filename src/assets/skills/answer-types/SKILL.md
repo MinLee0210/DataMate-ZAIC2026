@@ -22,3 +22,6 @@ Pick exactly one type; the query result must have the shape below.
 - "khi nào", "ngày nào", "tháng nào" → date. "có ... không" → boolean.
 - "top 3", "những ... nào" → list. Asking for an item and its value → table.
 - A single best/worst item ("sản phẩm nào bán chạy nhất") → string.
+- Match the shape the question asks for, not the richest result: "những sản phẩm nào" with no
+  value asked → list (names only); "có … không", "đúng không" → boolean even when a number was
+  computed to decide it; table only when the question asks for an item **and** its value.

@@ -12,6 +12,9 @@
 #                         reach ~28k tokens on public_test, plus ANALYZE_MAX_TOKENS of thinking.
 #                         Longer needs YaRN (ROPE_YARN=1); not on by default, it hurts short texts.
 #   MAX_NUM_SEQS (16)  GPU_MEMORY_UTILIZATION (0.90)
+#   REASONING_PARSER ()   e.g. qwen3, gemma4: thinking goes to reasoning_content, the reply
+#                         holds only the answer
+#   TEXT_ONLY (0)         1 = no image/audio/video inputs (frees the encoders' memory)
 #
 # Single A40 (48 GB) with the FP8 checkpoint:  TP=1 ./scripts/vllm.sh
 set -euo pipefail
@@ -39,6 +42,12 @@ args=(
   --enable-prefix-caching
   --seed "${SEED:-2026}"
 )
+if [[ -n "${REASONING_PARSER:-}" ]]; then
+  args+=(--reasoning-parser "$REASONING_PARSER")
+fi
+if [[ "${TEXT_ONLY:-0}" == "1" ]]; then
+  args+=(--limit-mm-per-prompt '{"image": 0, "audio": 0, "video": 0}')
+fi
 if [[ -n "${QUANTIZATION:-}" ]]; then
   args+=(--quantization "$QUANTIZATION")
 fi

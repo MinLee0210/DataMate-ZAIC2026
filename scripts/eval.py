@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.splits import HOLDOUT  # noqa: E402
+from scripts.splits import subset_ids as split_subset_ids  # noqa: E402
 from src.evaluate import (  # noqa: E402
     check_format,
     diagnostics,
@@ -233,15 +233,14 @@ def export_submission(pred_path: Path, topic: str) -> Path:
 def subset_ids(
     ids: list[str], subset: str, seed: int = 2026, business_of: dict[str, str] | None = None
 ) -> list[str]:
-    """'all', 'devN' (fixed random sample of N ids), 'holdout' / 'holdoutN' (questions of the
-    hold-out businesses, scripts/splits.py) or a path to an ids file."""
+    """'all', 'devN' (fixed random sample of N ids over all businesses), a split name from
+    scripts/splits.py ('holdout', 'holdoutN', 'development', 'developmentN', 'foldK',
+    'sector:<name>') or a path to an ids file."""
     if subset == "all":
         return sorted(ids)
-    if subset.startswith("holdout") and (subset == "holdout" or subset[7:].isdigit()):
-        held = sorted(i for i in ids if (business_of or {}).get(i) in HOLDOUT)
-        if subset == "holdout":
-            return held
-        return sorted(random.Random(seed).sample(held, min(int(subset[7:]), len(held))))
+    split = split_subset_ids(ids, subset, business_of or {}, seed)
+    if split is not None:
+        return split
     if subset.startswith("dev") and subset[3:].isdigit():
         n = int(subset[3:])
         return sorted(random.Random(seed).sample(sorted(ids), min(n, len(ids))))
