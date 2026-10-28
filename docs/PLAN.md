@@ -40,6 +40,15 @@ fixes. Public leaderboard: −0.169, then −0.023 (deepseek-flash, vote pipelin
 10. [ ] Write the results to docs/NOTES.md and EXPERIMENTS.md (eval does the rows), commit and
     push (pre-commit first; `git_acc personal`, then back to `work`).
 
+Later (agreed 2026-10-28): **evaluate two other target models** against Qwen3-14B-FP8, same
+pipeline, dev200 + holdout200, on the GPU pod (about 20-25 min and 1 USD each on 2x RTX 5090).
+Survey: [reports/2026-10-28/llm-candidates](reports/2026-10-28/llm-candidates/report.md).
+11. [ ] `Qwen/Qwen3.5-9B` (9.65B, 2026-02-27, Apache-2.0): thinking on by default, 201 languages.
+12. [ ] `google/gemma-4-12B-it` (11.95B, 2026-05-23, Apache-2.0): configurable thinking.
+    For each: read the licence file, confirm date and parameter count from `config.json`, check
+    vLLM 0.32 support and the chat template's thinking switch (`ANALYZE_EXTRA_BODY` may differ
+    from Qwen3's `enable_thinking`), and add the row to docs/MODELS.md **before** running it.
+
 Also open, not blocking the pod run:
 - The dev200 run of dataAgent with thinking on the fixed ingest (`ca-thinking-ingest3`) was
   stopped. Re-run it on deepseek-flash if the pod is late, to measure the ingest fixes.

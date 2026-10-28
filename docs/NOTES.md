@@ -2,6 +2,30 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-28 - First target-model run (A40), stopped at 137/1000; fixes from it
+- public_test on Qwen3-14B-FP8, vLLM 0.32 on 1x A40, dataAgent with thinking, 12 workers. Stopped
+  at 137 questions (the user moved to 2x RTX 5090). Files: data/results/2026-10-28/
+  public-test-qwen3-partial/raw (submission, trace, logs); W&B run 2026-10-28/public-test-qwen3-partial.
+- Speed: about 40 s per question at 12 in parallel (about 11 h for 1000 on an A40); 4,465
+  completion tokens and 3.4 LLM steps per question; 16k prompt tokens per call; 4 calls cut at the
+  10,240 thinking budget. Each reasoning step took 130-165 s under load.
+- 47 of 137 abstained, but about 39 of them were not the model's choice: in the final step Qwen3
+  wrote the value ("42149500"), an index ("0") or nothing instead of the result's name, and the
+  answer was dropped; 7 more were JSON errors (invalid escapes, a missing comma).
+  Fixes: `ca.resolve_result` (name, case-insensitive name, index, a result holding that value,
+  the only usable result), the prompt lists the result names, invalid escapes are repaired, and a
+  JSON error in step 3 is shown to step 4 instead of failing the question. Replaying the traces'
+  SQL offline: 22 of the 39 now resolve to a result; the other 17 had a value the model computed
+  itself (left as abstain).
+- 16 of 137 were "unanswerable" (train: 2.3 %). 4 were dates the model could not parse, others a
+  too strict reading ("no column matches the revenue definition"). Ingest now parses mixed dates;
+  the results prompt says when a question is not unanswerable (computable measure, spelling,
+  date parsing, an empty period inside the data).
+- Ingest version 5 also drops subtotal rows and repeated header rows (details in
+  notes/2026-10-27/data-errors/notes.md, errors 6-8). Train had text date columns in 6 businesses
+  and subtotal rows in 5, unnoticed until now.
+- Not measured yet: none of these fixes has a dev200 or public score; the next run is on 2x 5090.
+
 ## 2026-10-28 - Experiment tracking on W&B; hold-out split; duplicate order lines
 - W&B project `octoopt/zaic2026-datamate`. `scripts/devfree/wandb_report.py` reads what the eval
   wrote (`docs/analysis/<date>/<topic>/metrics.json`, `summary.md`) and logs PA, right / wrong /

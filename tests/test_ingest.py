@@ -143,3 +143,32 @@ def test_duplicate_lines_of_an_order_count_once():
     assert drop_duplicate_order_lines(lines)["ma_hoa_don"].tolist() == ["H1", "H2"]
     log = pd.DataFrame({"ngay": ["01/05", "01/05"], "so_tien": [5, 5]})  # no order code: keep both
     assert len(drop_duplicate_order_lines(log)) == 2
+
+
+def test_mixed_date_formats_become_one_date_column():
+    from src.modules.ingest.clean import add_sheet_year, infer_column
+
+    col = pd.Series(["30 thg 5 2026", "45678", "29/11/2025", "ngày 3 tháng 12 năm 2025", "12/5"])
+    typed = infer_column(add_sheet_year(col.to_frame("ngay"), 2026)["ngay"])
+    assert pd.api.types.is_datetime64_any_dtype(typed)
+    assert [d.strftime("%Y-%m-%d") for d in typed] == [
+        "2026-05-30",
+        "2025-01-21",
+        "2025-11-29",
+        "2025-12-03",
+        "2026-05-12",
+    ]
+
+
+def test_subtotal_and_repeated_header_rows_are_dropped():
+    from src.modules.ingest.clean import drop_repeated_headers, drop_subtotal_rows
+
+    frame = pd.DataFrame(
+        {
+            "khach": ["Tong Ngoc Chi", "Tổng ngày 30/05", "Mã đơn", "Cộng", "An"],
+            "ma_don": ["D1", None, "Mã đơn", None, "D2"],
+            "tien": ["5", "5", "Tiền", "10", "7"],
+        }
+    )
+    out = drop_subtotal_rows(drop_repeated_headers(frame, ["Khách", "Mã đơn", "Tiền"]))
+    assert out["khach"].tolist() == ["Tong Ngoc Chi", "An"]

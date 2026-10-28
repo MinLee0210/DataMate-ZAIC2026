@@ -22,6 +22,9 @@ MAX_MODEL_LEN="${MAX_MODEL_LEN:-40960}"
 NATIVE_LEN=40960
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}" TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 export VLLM_NO_USAGE_STATS=1
+# DeepGEMM JIT-compiles its FP8 kernels and needs nvcc >= 12.9 in the image; on RTX 5090 (sm_120)
+# vLLM's CUTLASS FP8 kernels work without it. Set VLLM_USE_DEEP_GEMM=1 only with a CUDA toolkit.
+export VLLM_USE_DEEP_GEMM="${VLLM_USE_DEEP_GEMM:-0}"
 
 args=(
   --served-model-name "$SERVED_MODEL"

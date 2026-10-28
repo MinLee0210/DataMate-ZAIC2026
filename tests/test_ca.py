@@ -117,13 +117,53 @@ def test_ca_pipeline_runs_analysis_then_final(toy_split, tmp_path, monkeypatch):
     assert [m["type"] for m in trace["messages"]].count("analysis") == 1
 
 
-def test_ca_pipeline_abstains_on_bad_final(toy_split, tmp_path, monkeypatch):
+def test_ca_pipeline_uses_the_only_result_when_the_name_is_wrong(toy_split, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "pipeline", "ca")
-    llm = FakeLLM(
-        ca_replies(
-            {"thought": "?", "action": "final", "answer_type": "number", "data_result": "missing"}
-        )
-    )
-    answer, trace = service_for(toy_split, tmp_path, llm).answer(question())
+    final = {"thought": "?", "action": "final", "answer_type": "number", "data_result": "missing"}
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    assert answer.type == "number"
+
+
+def test_ca_pipeline_abstains_when_the_final_cannot_be_formatted(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "ca")
+    final = {"thought": "?", "action": "final", "answer_type": "date", "data_result": "rev"}
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
     assert answer.type == "abstain"
     assert [m["type"] for m in trace["messages"]].count("error") == 2
+
+
+def _results(**frames):
+    from src.services.qa.ca import DataResult
+
+    return {n: DataResult(n, "", "sql", "SELECT 1", pd.DataFrame(f)) for n, f in frames.items()}
+
+
+@pytest.mark.parametrize(
+    "ref, expected",
+    [
+        ("total_revenue", 42149500),
+        ("Total_Revenue", 42149500),
+        ("1", 42149500),  # an index, 0-based
+        ("42149500", 42149500),  # the value instead of the name
+        ("42149500.0", 42149500),
+        ("Cty Trương Hoa", "Cty Trương Hoa"),  # a cell of a larger result
+        (None, None),  # several results, no name: no answer
+        ("WITH x AS (SELECT 1) SELECT 2", None),
+    ],
+)
+def test_resolve_result(ref, expected):
+    from src.services.qa.ca import resolve_result
+
+    results = _results(
+        top_customers={"khach": ["Cty Trương Hoa", "An"], "tien": [9, 5]},
+        total_revenue={"doanh_thu": [42149500]},
+    )
+    hit = resolve_result(results, ref)
+    assert (hit.frame.iat[0, 0] if hit else None) == expected
+
+
+def test_first_json_object_repairs_invalid_escapes():
+    from src.modules.agents.sql_agent import first_json_object
+
+    reply = r'{"sql": "SELECT regexp_matches(x, \'\d+\')", "ok": "a\\d"}'
+    assert first_json_object(reply) == {"sql": r"SELECT regexp_matches(x, '\d+')", "ok": r"a\d"}

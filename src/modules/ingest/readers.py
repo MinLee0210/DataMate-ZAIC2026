@@ -7,7 +7,10 @@ import openpyxl
 import pandas as pd
 
 from src.modules.ingest.clean import (
+    add_sheet_year,
     drop_duplicate_order_lines,
+    drop_repeated_headers,
+    drop_subtotal_rows,
     fill_grouped_rows,
     frame_from_raw,
     infer_types,
@@ -113,11 +116,26 @@ def read_tables(path: Path, infer: bool = True) -> list[Table]:
         if table.frame.empty:
             logger.warning("skipping empty table %s", table.source)
             continue
-        table.frame = drop_duplicate_order_lines(fill_grouped_rows(table.frame))
+        frame = drop_repeated_headers(table.frame, table.originals)
+        frame = add_sheet_year(drop_subtotal_rows(frame), _source_year(table.source))
+        table.frame = drop_duplicate_order_lines(fill_grouped_rows(frame))
         if infer:
             table.frame = infer_types(table.frame)
         out.append(table)
     return out
+
+
+_YEAR = re.compile(r"(?<!\d)(20\d{2})(?!\d)")
+
+
+def _source_year(source: str) -> int | None:
+    """The year in the sheet name, else in the file name ("BanHang.xlsx#T05_2025" -> 2025)."""
+    file, _, sheet = source.partition("#")
+    for part in (sheet, file):
+        years = _YEAR.findall(part)
+        if years:
+            return int(years[-1])
+    return None
 
 
 SOURCE_COLUMN = "nguon"

@@ -14,6 +14,11 @@ public before 2026-10-01, licence allows use.
 **Budget used: 14.8B / 15B.** Nothing else fits next to a 14B model: a verifier or an embedding
 model would require switching the target to an ~8B model (see docs/PROJECT.md §6).
 
+Next to evaluate (agreed 2026-10-28, not used yet; declare in the table above before the first run):
+`Qwen/Qwen3.5-9B` (9.65B incl. vision encoder, 2026-02-27, Apache-2.0) and
+`google/gemma-4-12B-it` (11.95B, 2026-05-23, Apache-2.0). Survey and other options:
+[reports/2026-10-28/llm-candidates](reports/2026-10-28/llm-candidates/report.md).
+
 Alternatives to compare on dev200 with the same pipeline before locking the target:
 `Qwen/Qwen2.5-Coder-14B-Instruct` (14.7B), `seeklhy/OmniSQL-14B` (~14.8B, text-to-SQL tuned). Verify
 the parameter count and release date from the model card before adding a row above.

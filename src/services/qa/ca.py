@@ -25,7 +25,7 @@ import pandas as pd
 
 from src.data.duckdb import DuckDBSource
 from src.models import VALUE_TYPES, Answer
-from src.modules.agents.sql_agent import SQLAgent
+from src.modules.agents.sql_agent import PlanParseError, SQLAgent
 from src.modules.context.sampling import sample_fields
 from src.modules.python_exec import run_python
 from src.services.ingest import BusinessContext
@@ -72,6 +72,47 @@ class DataResult:
             "rows": rows,
             "error": self.error,
         }
+
+
+def _same_value(cell: object, ref: str) -> bool:
+    if str(cell).strip().lower() == ref.strip().lower():
+        return True
+    try:
+        a, b = float(cell), float(ref)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    return abs(a - b) <= 1e-6 * max(1.0, abs(a)) or round(a, 2) == round(b, 2)
+
+
+def resolve_result(results: dict[str, DataResult], ref: object) -> DataResult | None:
+    """The result a final answer points to. The model should give a result's name, but it also
+    writes an index ("0"), the value itself ("42149500") or nothing. Tried in order: the name
+    (case and quotes ignored), an index, a result holding that value (a single cell is cut out
+    of a larger result), the only usable result."""
+    usable = [r for r in results.values() if r.frame is not None and not r.error]
+    text = "" if ref is None else str(ref).strip().strip("`'\"")
+    by_name = {r.name.lower(): r for r in usable}
+    if text.lower() in by_name:
+        return by_name[text.lower()]
+    if text.isdigit() and usable and int(text) <= len(usable):
+        i = int(text)  # 0-based; a 1-based index of the last result is accepted too
+        return usable[i] if i < len(usable) else usable[-1]
+    if text:
+        for r in reversed(usable):
+            frame = r.frame
+            assert frame is not None
+            if frame.shape == (1, 1) and _same_value(frame.iat[0, 0], text):
+                return r
+        for r in reversed(usable):
+            frame = r.frame
+            assert frame is not None
+            for row in frame.head(200).itertuples(index=False):
+                for cell in row:
+                    if _same_value(cell, text):
+                        return DataResult(
+                            r.name, r.question, r.language, r.code, pd.DataFrame([[cell]])
+                        )
+    return usable[0] if len(usable) == 1 else None
 
 
 class CAPipeline:
@@ -187,23 +228,40 @@ class CAPipeline:
             started = time.perf_counter()
             data = "\n\n".join([r.render() for r in results.values()] + notes) or "(no results)"
             actions = load_prompt_template("ca_actions_final" if last else "ca_actions_more")
-            reply = self._think(
-                "ca_results_thought",
-                {**ctx, "thought": thoughts, "data": data, "actions": actions},
-                step,
-            )
+            names = ", ".join(f"`{r.name}`" for r in results.values() if not r.error) or "(none)"
+            try:
+                reply = self._think(
+                    "ca_results_thought",
+                    {**ctx, "thought": thoughts, "data": data, "actions": actions, "names": names},
+                    step,
+                )
+            except PlanParseError as e:  # recoverable once: the next step sees the error
+                timed("thought_results", started)
+                notes.append(
+                    f"### Error in your last reply\n{e}. Reply with one valid JSON object."
+                )
+                messages.append({"type": "error", "step": step, "text": str(e)})
+                if last:
+                    reason = f"bad reply: {e}"
+                    break
+                continue
             timed("thought_results", started)
             action = str(reply.get("action", "")).strip().lower()
             text = str(reply.get("thought", "")).strip()
             thoughts += "\n\n" + text
-            messages.append({"type": "thought", "step": step, "text": text, "action": action})
+            message = {"type": "thought", "step": step, "text": text, "action": action}
+            if action == "final":
+                message.update(
+                    answer_type=reply.get("answer_type"), data_result=reply.get("data_result")
+                )
+            messages.append(message)
 
             if action == "final":
                 answer_type = str(reply.get("answer_type", "")).strip().lower()
                 if answer_type == "unanswerable":
                     answer, reason = Answer(type="unanswerable"), str(reply.get("reason", ""))
                     break
-                result = results.get(str(reply.get("data_result", "")))
+                result = resolve_result(results, reply.get("data_result"))
                 problem = None
                 if answer_type not in VALUE_TYPES:
                     problem = f"unknown answer_type {answer_type!r}"

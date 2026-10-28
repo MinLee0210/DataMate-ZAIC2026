@@ -55,3 +55,31 @@ skill, so the agent can also recognise and fix a case ingest misses.
 ## Process
 - `INGEST_VERSION` is part of the ingest cache key; bump it whenever ingest output changes.
 - Re-run `make ingest SPLIT=train` and a dev200 eval after any ingest change.
+
+## Found 2026-10-28 (ingest version 5)
+
+### 5. Duplicate lines of an order (version 4)
+- Rulebook §8: two lines of one order equal in every cell are an export error and count once.
+- Seen in 6 train businesses (biz_105, 106, 117, 119, 127, 128; 479 to 3,230 rows each). biz_128
+  revenue "hôm nay" (2026-08-11): 40,228,500 with the duplicates, 39,793,500 (= gold) without.
+- Fix: `clean.drop_duplicate_order_lines`, only in tables with an order code column.
+
+### 6. Date columns left as text
+- Mixed formats in one column: `29/11/2025`, `30 thg 5 2026`, Excel day numbers (`45678`), and
+  `dd/mm` without a year (rulebook §8: the year of the sheet).
+- Train: 11 columns in biz_101, 105, 106, 109, 117, 124. public_test: 20 columns. On public_test
+  the model called 4 of its first 16 "unanswerable" questions unanswerable because dates could
+  not be parsed.
+- Fix: `clean.normalize_date_text` (Vietnamese month words, Excel serials) and
+  `clean.add_sheet_year` (year from the sheet name, else the file name).
+
+### 7. Subtotal rows mixed into the data
+- `Tổng ngày 30/05`, `Cộng ngày 01/02/2026`, `TỔNG THÁNG`, `Cộng`: summing a column counts them
+  twice. Train: biz_104, 105, 107, 110, 130. public_test: 20 columns (dev_001: 554 rows).
+- A name like `Tong Ngoc Chi` (Tống, no accents) is not a subtotal: the pattern needs a bare
+  tổng / cộng or a period word after it. Removed before the fill-down, or a subtotal row would get
+  the previous order's code.
+
+### 8. Header rows repeated inside a sheet
+- public_test only (76 columns): exports that print the header again on each block. They also
+  turned numeric columns into text. Rows equal to the header in at least half the cells go.

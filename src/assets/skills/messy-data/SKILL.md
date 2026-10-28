@@ -18,6 +18,10 @@ yourself: sample the column, then fix it in the query (SQL) or in an analysis st
   written on its first line only, the next lines got them filled in (rulebook §8).
 - **Duplicate lines of an order are dropped.** Two lines of the same order equal in every cell
   count once (rulebook §8). Equal rows in a table without an order code are kept.
+- **Dates** in one column written several ways (`29/11/2025`, `30 thg 5 2026`, Excel day numbers
+  such as `45678`) are one date column; a date without a year takes its sheet's year (rulebook §8).
+- **Subtotal and total rows** (`Tổng ngày 30/05`, `Cộng ngày …`, `TỔNG THÁNG`, `Cộng`) and **header
+  rows repeated** inside a sheet are removed. Do not add totals of your own on top of line rows.
 - **Headers** are found below titles; merged cells repeat their value.
 
 ## Check before trusting a result
@@ -38,4 +42,6 @@ yourself: sample the column, then fix it in the query (SQL) or in an analysis st
   code when there is one; otherwise compare folded text:
   `replace(strip_accents(lower(trim(x))), 'đ', 'd')` (`strip_accents` keeps `đ`).
 - Dates: check `min`/`max` of the date column against the as-of date; rows after it exist and must
-  be excluded.
+  be excluded. A date column still in `VARCHAR`: parse it in SQL with `try_strptime(col,
+  ['%d/%m/%Y', '%Y-%m-%d', ...])` or in pandas (`pd.to_datetime(..., dayfirst=True)`); never call
+  the question unanswerable because dates need parsing.

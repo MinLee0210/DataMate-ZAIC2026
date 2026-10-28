@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from datetime import date, timedelta
 
 import pandas as pd
 
@@ -200,6 +201,79 @@ def _parse_dates(values: pd.Series) -> pd.Series:
     return out
 
 
+# 30 thg 5 2026, ngày 30 tháng 5 năm 2026, 30 tháng 5, 2026 (year optional)
+_VN_DATE = re.compile(
+    r"^(?:ngày\s*)?(\d{1,2})\s*(?:thg|tháng|th)\s*(\d{1,2})(?:\s*,?\s*(?:năm\s*)?(\d{4}))?$",
+    re.IGNORECASE,
+)
+_SERIAL = re.compile(r"^\d{5}(\.0+)?$")  # Excel day number, 1954..2119 for 20000..80000
+_NO_YEAR = re.compile(r"^(\d{1,2})[/.-](\d{1,2})$")
+_EXCEL_EPOCH = date(1899, 12, 30)
+
+
+def normalize_date_text(value: object) -> str:
+    """One date cell as text `parse_dates` reads: Vietnamese month words and Excel day numbers
+    become day/month/year or ISO. Anything else is returned stripped."""
+    text = str(value).strip()
+    m = _VN_DATE.match(text)
+    if m:
+        day, month, year = m.groups()
+        return f"{day}/{month}/{year}" if year else f"{day}/{month}"
+    if _SERIAL.match(text):
+        n = int(float(text))
+        if 20000 <= n <= 80000:
+            return (_EXCEL_EPOCH + timedelta(days=n)).isoformat()
+    return text
+
+
+def add_sheet_year(frame: pd.DataFrame, year: int | None) -> pd.DataFrame:
+    """Rulebook §8: a date written without a year has the year of its sheet.
+
+    Only in a column where at least a fifth of the cells are full dates, so a fraction like 1/2
+    in another column is left alone."""
+    if year is None:
+        return frame
+    out = frame.copy()
+    for col in out.columns:
+        values = out[col].dropna()
+        if values.empty or not (values.dtype == object or pd.api.types.is_string_dtype(values)):
+            continue
+        text = values.map(normalize_date_text)
+        if text.str.match(_DATE_LIKE).mean() < 0.2 or not text.str.match(_NO_YEAR).any():
+            continue
+        out.loc[values.index, col] = text.map(lambda t: f"{t}/{year}" if _NO_YEAR.match(t) else t)
+    return out
+
+
+_SUBTOTAL = re.compile(
+    r"^(tổng|cộng|tong|cong)(\s+(cộng|cong))?(\s+(ngày|ngay|tháng|thang|năm|nam|tuần|tuan)\b.*)?$|"
+    r"^(total|subtotal|grand total)\b",
+    re.IGNORECASE,
+)
+
+
+def drop_subtotal_rows(frame: pd.DataFrame) -> pd.DataFrame:
+    """Drop subtotal and total rows mixed into the data ("Tổng ngày 30/05", "Cộng ngày …",
+    "TỔNG THÁNG", "Cộng"), so sums do not count them twice.
+
+    "Tong Ngoc Chi" (a name) does not match: a bare tổng / cộng must stand alone or be followed
+    by a period word. Run before `fill_grouped_rows`, or the subtotal would get an order code."""
+    text = frame.astype(str).apply(lambda c: c.str.strip())
+    hit = text.apply(lambda c: c.str.match(_SUBTOTAL)).any(axis=1)
+    return frame[~hit].reset_index(drop=True) if hit.any() else frame
+
+
+def drop_repeated_headers(frame: pd.DataFrame, originals: list[str]) -> pd.DataFrame:
+    """Drop rows that repeat the header (exports that print it again on every page or block)."""
+    if frame.empty or not originals:
+        return frame
+    headers = [str(h).strip().lower() for h in originals]
+    text = frame.astype(str).apply(lambda c: c.str.strip().str.lower())
+    same = sum(text.iloc[:, j] == headers[j] for j in range(min(len(headers), frame.shape[1])))
+    repeated = same >= max(2, (frame.shape[1] + 1) // 2)
+    return frame[~repeated].reset_index(drop=True) if repeated.any() else frame
+
+
 def infer_column(series: pd.Series) -> pd.Series:
     """Convert a text column to numbers or dates when nearly all of its values parse."""
     non_null = series.dropna()
@@ -209,9 +283,9 @@ def infer_column(series: pd.Series) -> pd.Series:
     numbers = non_null.map(lambda v: parse_number(v, locale))
     if numbers.notna().mean() >= PARSE_THRESHOLD:
         return series.map(lambda v: parse_number(v, locale)).astype("float64")
-    as_text = non_null.astype(str).str.strip()
+    as_text = non_null.map(normalize_date_text)
     if as_text.str.match(_DATE_LIKE).mean() >= PARSE_THRESHOLD:
-        parsed = _parse_dates(series.dropna())
+        parsed = _parse_dates(as_text)
         if parsed.notna().mean() >= PARSE_THRESHOLD:
             out = pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
             out[parsed.index] = parsed

@@ -16,6 +16,8 @@ DEFAULT_SKILLS = [
     "messy-data",
 ]
 _DECODER = json.JSONDecoder()
+# a JSON escape (group 1), or a backslash followed by any other character (group 2)
+_ESCAPE = re.compile(r'\\(["\\/bfnrt]|u[0-9a-fA-F]{4})|\\(.)', re.DOTALL)
 # a thinking block, closed or cut off by max_tokens (then it runs to the end of the reply)
 _THINK = re.compile(r"<think>.*?(?:</think>|$)", re.DOTALL)
 
@@ -24,24 +26,45 @@ class PlanParseError(ValueError):
     pass
 
 
-def first_json_object(text: str) -> dict:
-    """The first JSON object in a reply, ignoring text before or after it (and other objects).
+def _repair_escapes(text: str) -> str:
+    r"""Valid JSON escapes stay; `\'` becomes `'`; any other lone backslash (`\d` in a regex)
+    becomes a literal backslash."""
 
-    Raises PlanParseError when no object decodes."""
-    text = _THINK.sub("", text)
-    start = text.find("{")
-    if start < 0:
-        raise PlanParseError("no JSON object in reply")
-    error = None
+    def fix(m: re.Match) -> str:
+        if m.group(1):
+            return m.group(0)
+        return "'" if m.group(2) == "'" else "\\\\" + m.group(2)
+
+    return _ESCAPE.sub(fix, text)
+
+
+def _decode_first(text: str) -> tuple[dict | None, Exception | None]:
+    start, error = text.find("{"), None
     while start >= 0:
         try:
             data, _ = _DECODER.raw_decode(text, start)
             if isinstance(data, dict):
-                return data
+                return data, None
         except json.JSONDecodeError as e:
             error = error or e
         start = text.find("{", start + 1)
-    raise PlanParseError(f"invalid JSON: {error}")
+    return None, error
+
+
+def first_json_object(text: str) -> dict:
+    r"""The first JSON object in a reply, ignoring text before or after it (and other objects).
+
+    When nothing decodes, invalid escapes (`\d`, `\'`) are repaired and it tries again.
+    Raises PlanParseError when no object decodes."""
+    text = _THINK.sub("", text)
+    if "{" not in text:
+        raise PlanParseError("no JSON object in reply")
+    data, error = _decode_first(text)
+    if data is None:
+        data, _ = _decode_first(_repair_escapes(text))
+    if data is None:
+        raise PlanParseError(f"invalid JSON: {error}")
+    return data
 
 
 @dataclass
