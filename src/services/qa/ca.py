@@ -41,6 +41,7 @@ from src.utils.timeparse import LunarCalendar
 logger = get_logger(__name__)
 
 MAX_QUERIES = 3
+MAX_LLM_CALLS = 4
 PREVIEW_ROWS = 20
 PREVIEW_CHARS = 2500
 
@@ -178,6 +179,7 @@ class CAPipeline:
         few_shot_k: int = 0,
         samples: int = 1,
         min_agreement: float = 0.0,
+        early_stop: bool = False,
     ) -> None:
         self.agent = agent
         self.seed = seed
@@ -192,10 +194,15 @@ class CAPipeline:
         self.few_shot_k = few_shot_k
         self.samples = max(1, samples)
         self.min_agreement = min_agreement
+        self.early_stop = early_stop
         self.variants = [v.strip() for v in load_prompt_template("ca_variants").split("\n---\n")]
         self._sample = 0
+        self._llm_calls = 0
 
     def _think(self, template: str, values: dict[str, str], step: int) -> dict:
+        if self._llm_calls >= MAX_LLM_CALLS:
+            raise RuntimeError("CA reasoning call budget exhausted")
+        self._llm_calls += 1
         return self.agent.think(
             template,
             values,
@@ -252,16 +259,19 @@ class CAPipeline:
             self._sample = 0
             return self._run_once(question, as_of, business, source, self.variants[0])
         runs = []
+        votes: dict[str, list[Answer]] = {}
         for i in range(self.samples):
             self._sample = i
             approach = self.variants[i % len(self.variants)]
-            runs.append(self._run_once(question, as_of, business, source, approach))
-        votes: dict[str, list[Answer]] = {}
-        for answer, _ in runs:
+            answer, t = self._run_once(question, as_of, business, source, approach)
+            runs.append((answer, t))
             if answer.type != "abstain":
                 key = vote_key(Candidate(answer.type, answer.value))
                 votes.setdefault(key, []).append(answer)
+            if self.early_stop and self._decided(votes, self.samples - i - 1):
+                break
         top = max(votes.values(), key=len)[0] if votes else None  # first-seen wins ties
+        # a lower bound when the loop stopped early: the samples not run are counted as dissent
         agreement = round(max(map(len, votes.values())) / self.samples, 4) if votes else 0.0
         final = (
             top if top is not None and agreement >= self.min_agreement else Answer(type="abstain")
@@ -282,6 +292,16 @@ class CAPipeline:
         }
         return final, trace
 
+    def _decided(self, votes: dict[str, list[Answer]], remaining: int) -> bool:
+        """True when the samples still to run cannot change the outcome: the leading answer
+        cannot be overtaken and already meets MIN_AGREEMENT, so the answer is the same as with
+        all samples (only the reported agreement is lower)."""
+        if remaining <= 0 or not votes:
+            return False
+        counts = sorted((len(v) for v in votes.values()), reverse=True)
+        second = counts[1] if len(counts) > 1 else 0
+        return counts[0] > second + remaining and counts[0] / self.samples >= self.min_agreement
+
     def _run_once(
         self,
         question: str,
@@ -290,6 +310,7 @@ class CAPipeline:
         source: DuckDBSource,
         approach: str,
     ) -> tuple[Answer, dict]:
+        self._llm_calls = 0
         timings: dict[str, float] = {}
         messages: list[dict] = []
 
@@ -349,6 +370,9 @@ class CAPipeline:
         confidence: float | None = None
         extra_failed = False
         for step in (3, 4, 5):
+            if self._llm_calls >= MAX_LLM_CALLS:
+                reason = "CA reasoning call budget exhausted"
+                break
             last = step == 5 or (step == 4 and not extra_failed)
             started = time.perf_counter()
             data = "\n\n".join([r.render() for r in results.values()] + notes) or "(no results)"
@@ -440,7 +464,7 @@ class CAPipeline:
         trace = {
             "pipeline": "ca",
             "messages": json.loads(json.dumps(messages, ensure_ascii=False, default=str)),
-            "llm_steps": sum(1 for m in messages if m["type"] == "thought"),
+            "llm_steps": self._llm_calls,
             "timings": {k: round(v, 4) for k, v in timings.items()},
             # for the PA-vs-tau curve: the answer before the confidence gate, and its confidence
             "top": top.model_dump() if top is not None else None,

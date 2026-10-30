@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # LLM: hosted OpenAI-compatible provider in dev_free, local vLLM in dev_constraint / final
     llm_base_url: str = "http://127.0.0.1:8001/v1"
-    llm_model: str = "Qwen/Qwen3-14B"
+    llm_model: str = "Qwen/Qwen3.5-9B"
     llm_api_key: str = "EMPTY"
     llm_temperature: float = 0.0
     llm_max_tokens: int = 1024
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     seed: int = 2026
     # "vote": k SQL candidates + vote (services/qa/graph.py).
     # "ca": the reasoning loop of Google's Conversational Analytics API (services/qa/ca.py)
-    pipeline: str = "vote"
+    pipeline: str = "ca"
     # vote pipeline: business analysis step before SQL generation (one LLM call per question)
     analyze: bool = True
     # JSON merged over LLM_EXTRA_BODY for the analysis call (vote) or every CA step, e.g. thinking:
@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # vote; answer only when the majority share >= CA_MIN_AGREEMENT (chosen by scripts/calibrate)
     ca_samples: int = 1
     ca_min_agreement: float = 0.0
+    # stop sampling once the remaining samples cannot change the answer or the gate (saves time
+    # when the first samples agree; the trace's agreement is then a lower bound)
+    ca_early_stop: bool = False
 
     # FINAL_MODE=1: competition inference, only a local LLM endpoint is allowed
     final_mode: bool = False

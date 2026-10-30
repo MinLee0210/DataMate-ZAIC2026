@@ -207,7 +207,7 @@ def test_unanswerable_without_evidence_gets_zero_confidence(toy_split, tmp_path,
     assert answer.type == "unanswerable"
 
 
-def test_a_failed_extra_query_earns_one_more_step(toy_split, tmp_path, monkeypatch):
+def test_a_failed_extra_query_stays_within_call_budget(toy_split, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "pipeline", "ca")
     replies = iter(
         [
@@ -226,8 +226,8 @@ def test_a_failed_extra_query_earns_one_more_step(toy_split, tmp_path, monkeypat
         lambda p: json.dumps(next(replies)) if "Reason over the results" in p else base(p)
     )
     answer, trace = service_for(toy_split, tmp_path, llm).answer(question())
-    assert answer.type == "number" and answer.value == 7
-    assert trace["llm_steps"] == 5
+    assert answer.type == "abstain"
+    assert trace["llm_steps"] == 4
     bad = [m for m in trace["messages"] if m.get("name") == "bad"][0]
     assert "Columns of orders" in bad["error"]  # the hint lists the real columns
 
@@ -311,3 +311,39 @@ def test_money_answers_are_rounded_to_whole_vnd_in_the_pipeline(toy_split, tmp_p
     # "doanh thu" is a money question: an average order value is money, whole VND
     answer, _ = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
     assert answer.value == 169725
+
+
+def _approach_replies(sql_for):
+    def reply(prompt):
+        if "first step: reason over the schema" in prompt:
+            return json.dumps({"thought": "t", "sample_fields": []})
+        if "plan the data queries" in prompt:
+            data = [{"name": "r", "sql": sql_for(prompt)}]
+            return json.dumps({"thought": "q", "data_queries": data})
+        return json.dumps(
+            {"thought": "ok", "action": "final", "answer_type": "number", "data_result": "r"}
+        )
+
+    return reply
+
+
+def test_early_stop_skips_samples_that_cannot_change_the_answer(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "ca_samples", 3)
+    monkeypatch.setattr(settings, "ca_min_agreement", 0.6)
+    monkeypatch.setattr(settings, "ca_early_stop", True)
+    reply = _approach_replies(lambda p: "SELECT 9" if "Verify independently" in p else "SELECT 5")
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert answer.value == 5 and len(trace["samples"]) == 2  # 2 of 3 already decide it
+    assert trace["agreement"] == round(2 / 3, 4)
+
+
+def test_early_stop_keeps_sampling_when_the_samples_disagree(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "ca_samples", 3)
+    monkeypatch.setattr(settings, "ca_min_agreement", 0.6)
+    monkeypatch.setattr(settings, "ca_early_stop", True)
+    reply = _approach_replies(lambda p: "SELECT 9" if "Verify independently" in p else "SELECT 5")
+    monkeypatch.setattr(settings, "ca_min_agreement", 0.9)  # 2 of 3 cannot meet it: no early stop
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert answer.type == "abstain" and len(trace["samples"]) == 3

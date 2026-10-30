@@ -13,6 +13,8 @@ there is one. These are the ways to compute them on the tables you get.
   (`hủy đơn`, `Đã hủy đơn`, `Huỷ đơn`, `khách hủy`; `hàng trả về`, `Đổi trả`, `Đã hoàn hàng`).
   **Use them instead of comparing to one spelling**: a shop often writes the same status 2-4
   ways, and `= 'Đã hủy'` misses the others (a cancel count of 0 is almost always this mistake).
+  Both return false for a blank or NULL status; `NOT is_cancelled(status) AND NOT
+  is_returned(status)` therefore keeps ordinary rows with unspecified status.
 - `is_walk_in(customer_name)`: `khách lẻ`, `Khách lẻ`, `kl`, `lẻ`, `vãng lai`, empty. Walk-in
   orders are never a customer in counts or rankings.
 - `fold(x)`: lowercase, no accents, `đ` → `d`; compare names and labels with it.

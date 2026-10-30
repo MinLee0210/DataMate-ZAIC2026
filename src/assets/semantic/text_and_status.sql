@@ -4,13 +4,14 @@ CREATE OR REPLACE MACRO fold(x) AS replace(strip_accents(lower(trim(CAST(x AS VA
 
 -- Cancelled order, however the status is written: hủy / Huỷ đơn / Đã hủy / khách hủy / cancelled.
 CREATE OR REPLACE MACRO is_cancelled(status) AS
-    fold(status) LIKE '%huy%' OR fold(status) LIKE '%cancel%';
+    coalesce(fold(status) LIKE '%huy%' OR fold(status) LIKE '%cancel%', false);
 
 -- Returned order: trả hàng / hàng trả về / Đổi trả / Đã hoàn hàng / Hoàn trả / returned.
 -- Not 'hoàn thành' (completed): only 'hoan hang' and 'hoan tra' count.
 CREATE OR REPLACE MACRO is_returned(status) AS
-    fold(status) LIKE '%tra hang%' OR fold(status) LIKE '%tra ve%' OR fold(status) LIKE '%doi tra%'
-    OR fold(status) LIKE '%hoan hang%' OR fold(status) LIKE '%hoan tra%' OR fold(status) LIKE '%return%';
+    coalesce(fold(status) LIKE '%tra hang%' OR fold(status) LIKE '%tra ve%'
+    OR fold(status) LIKE '%doi tra%' OR fold(status) LIKE '%hoan hang%'
+    OR fold(status) LIKE '%hoan tra%' OR fold(status) LIKE '%return%', false);
 
 -- Walk-in customer (khách lẻ, kl, lẻ, vãng lai, empty): not a customer for counts and rankings.
 CREATE OR REPLACE MACRO is_walk_in(name) AS

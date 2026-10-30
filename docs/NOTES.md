@@ -2,6 +2,62 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-29 - NULL-safe status predicates
+
+- `is_cancelled(NULL)` and `is_returned(NULL)` previously returned SQL NULL. A common valid-order
+  predicate using `NOT` on both therefore silently dropped rows with missing status. The macros
+  now return false for NULL status, so such rows remain eligible. A regression test executes the
+  exact filter over NULL, completed and cancelled orders.
+- Bumped `INGEST_VERSION` to 8 because semantic macros are stored in the per-business DuckDB cache.
+  This is a verified correctness fix, not a measured PA improvement. A target-model run on a
+  clean business-family split is still needed to assess its scoring effect.
+
+## 2026-10-28 - Product architecture review and bounded CA calls
+
+- Compared official Google Conversational Analytics API, Snowflake Cortex Analyst and Databricks
+  Genie architecture documentation in [PRODUCT_ARCHITECTURES.md](PRODUCT_ARCHITECTURES.md).
+- Their transferable pattern is curated business semantics plus executed queries and isolated
+  benchmarks. DataMate's generic semantic layer remains thin, so rulebook metrics are the next
+  architecture target.
+- Enforced four actual CA LLM calls per sample, including parse retries. The old failed-query
+  path could use five calls; now it abstains after four. This preserves the documented inference
+  budget and makes the trace count reflect calls rather than successful thought messages.
+- Unit tests establish behavior only. PA and runtime effects require a target-model eval.
+
+## 2026-10-28 (late) - Public k=1 is negative; agreement filters; model check on dev200
+
+- Public results for Qwen3.5-9B:
+  - k=1: -0.259 (about 298 right / 557 wrong, 35 % right when answered, vs 73 % on dev200).
+  - k=1 + few-shot: -0.261.
+  - DeepSeek with the same pipeline got +0.104 (about 54 % right). The pipeline works; the
+    9B model is much weaker on the public shops.
+  - dev200 and the hold-out both overstate public scores badly.
+- Below 50 % right, every extra answer lowers PA, and an all-abstain file scores 0.
+  - On dev200 k=3, right-when-answered by votes for the top answer: 3/3 89 %, 2/3 67 %,
+    1/3 17 %.
+  - Built stricter public variants from the five runs (#1, #2 and #3's three samples), in
+    `data/results/2026-10-28/public-test-qwen35-9b-k3-agree*`:
+
+    | Variant | Answered |
+    |---|---|
+    | agree3 | 386 |
+    | agree4of5 | 356 |
+    | agree5of5 | 278 |
+
+  - Plan: upload agree4of5 next (no uploads left on 2026-10-28).
+- dev200, k=1, today's code:
+
+  | Model | PA |
+  |---|---|
+  | Qwen3-14B-FP8 | 0.455 |
+  | Qwen3.5-9B | 0.415 |
+  | Qwen2.5-Coder-14B-Instruct | 0.0 (50 % right when answered) |
+
+  - Drop the coder model.
+  - Qwen3-14B is slightly ahead; within noise on 200 questions, and about 1.5x slower.
+- Next on a pod: Qwen3-14B with k=3, the E3 skill rules, an eval set closer to public.
+  - Nothing overnight: pod cost.
+
 ## 2026-10-28 - Self-consistency k=3 wins on dev200 (E1); public #3 uses it; E2 paused
 
 - E1, Qwen3.5-9B, dataAgent + thinking, no few-shot, dev200 in two halves:

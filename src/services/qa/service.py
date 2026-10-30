@@ -67,6 +67,7 @@ class QAService:
                 few_shot_k=settings.few_shot_k,
                 samples=settings.ca_samples,
                 min_agreement=settings.ca_min_agreement,
+                early_stop=settings.ca_early_stop,
             )
             if settings.pipeline == "ca"
             else None

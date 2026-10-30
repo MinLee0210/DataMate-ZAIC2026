@@ -186,6 +186,17 @@ def test_semantic_status_and_walk_in_macros():
     assert all(ask("select is_cancelled(?)", s) for s in ["Huỷ đơn", "hủy đơn", "khách hủy"])
     assert all(ask("select is_returned(?)", s) for s in ["Đổi trả", "hàng trả về", "Đã hoàn hàng"])
     assert not ask("select is_returned(?)", "Đã hoàn thành")
+    assert ask("select is_cancelled(?)", None) is False
+    assert ask("select is_returned(?)", None) is False
+    conn.execute("create table order_status(status varchar)")
+    conn.executemany("insert into order_status values (?)", [(None,), ("Xong",), ("Đã hủy",)])
+    assert (
+        conn.execute(
+            "select count(*) from order_status "
+            "where not is_cancelled(status) and not is_returned(status)"
+        ).fetchone()[0]
+        == 2
+    )
     assert all(ask("select is_walk_in(?)", s) for s in ["khách lẻ", "kl", "lẻ", None])
     assert not ask("select is_walk_in(?)", "Lê Văn Kl")
 
