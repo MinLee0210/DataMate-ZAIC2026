@@ -2,7 +2,7 @@
 # Competition entrypoint: start the local vLLM server, wait for it, run batch inference.
 # Env: VLLM_PORT (8001), DATA_DIR (/data), RESULT_DIR (/result), SPLIT (private_test),
 #      START_VLLM (1; 0 = use a server that is already running), WORKERS (8),
-#      PIPELINE (ca = dataAgent), ANALYZE_EXTRA_BODY (thinking on for the reasoning steps),
+#      PIPELINE (malt = dataAgent), ANALYZE_EXTRA_BODY (thinking on for the reasoning steps),
 #      ANALYZE_MAX_TOKENS (10240). vLLM settings: scripts/vllm.sh (MAX_MODEL_LEN must hold the
 #      longest prompt, about 28k tokens, plus ANALYZE_MAX_TOKENS).
 set -euo pipefail
@@ -20,7 +20,7 @@ export LLM_MODEL="$SERVED_MODEL" SERVED_MODEL VLLM_PORT
 if [[ -z "${LLM_EXTRA_BODY:-}" ]]; then
   export LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'
 fi
-export PIPELINE="${PIPELINE:-ca}"
+export PIPELINE="${PIPELINE:-malt}"
 # default only when unset (a "${VAR-default}" with braces in the default corrupts a set value)
 if [[ -z "${ANALYZE_EXTRA_BODY+set}" ]]; then
   export ANALYZE_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": true}}'

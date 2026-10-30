@@ -102,7 +102,7 @@ make test                   # no network, no GPU
 make ingest SPLIT=train     # DuckDB + context cache per business
 
 # dataAgent with thinking, 8 questions in parallel
-PIPELINE=ca ANALYZE_EXTRA_BODY='{"thinking": {"type": "enabled"}}' \
+PIPELINE=malt ANALYZE_EXTRA_BODY='{"thinking": {"type": "enabled"}}' \
   make eval SUBSET=dev200 TOPIC=my-run WORKERS=8
 ```
 
@@ -162,13 +162,13 @@ src/
 │   ├── python_exec.py     sandbox for the agent's pandas analysis
 │   └── llm.py             OpenAI-compatible client (seed, temperature 0, per-call thinking)
 ├── services/ingest/       package → DuckDB + context, cached by content hash + INGEST_VERSION
-├── services/qa/           ca.py (dataAgent), graph.py (vote pipeline), service.py
+├── services/qa/           malt.py (dataAgent), graph.py (vote pipeline), service.py
 ├── utils/                 format.py, timeparse.py, text.py, assets.py (prompt / skill files),
 │                          health.py, logger.py
 ├── evaluate/              official PA scorer (rulebook §9), used by scripts/eval.py
 ├── routes/                /health, /ask (debugging, demo UI)
 └── assets/
-    ├── prompt_templates/  ca_*.md (dataAgent), sql_*.md, analyze.md, repair.md, rulebook.md
+    ├── prompt_templates/  malt_*.md (dataAgent), sql_*.md, analyze.md, repair.md, rulebook.md
     └── skills/            answer-types, time-expressions, ranking-rules, business-metrics,
                            unanswerable, messy-data
 scripts/                   eval.py, ingest.py, infer.sh, vllm.sh, rerun-check.sh,
@@ -181,7 +181,7 @@ notebooks/llm_call.py      one question through the pipeline, for debugging
 See `.env.example`. Main variables:
 
 - LLM: `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_EXTRA_BODY`, `LLM_STREAM`, `FINAL_MODE`
-- pipeline: `PIPELINE` (`ca` = dataAgent, or `vote`), `ANALYZE_EXTRA_BODY` (thinking for the reasoning
+- pipeline: `PIPELINE` (`malt` = dataAgent, or `vote`), `ANALYZE_EXTRA_BODY` (thinking for the reasoning
   steps), `ANALYZE_MAX_TOKENS`, `WORKERS`
 - vote pipeline: `K`, `TAU`, `MAX_REPAIRS`, `ANALYZE`
 - paths: `DATA_DIR`, `RESULT_DIR`, `WORK_DIR`, `SPLIT`; budget: `TIME_BUDGET_S`

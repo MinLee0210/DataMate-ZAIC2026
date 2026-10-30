@@ -11,7 +11,7 @@ VI_SKILLS = sorted(p.parent.name for p in SKILLS_DIR.glob("*/SKILL.vi.md"))
 
 def test_english_is_the_default():
     assert settings.prompt_lang == "en"
-    assert "Reason over" in load_prompt_template("ca_results_thought")
+    assert "Reason over" in load_prompt_template("malt_results_thought")
 
 
 @pytest.mark.parametrize("name", VI_TEMPLATES)

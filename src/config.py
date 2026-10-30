@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     llm_extra_body: str = ""
     seed: int = 2026
     # "vote": k SQL candidates + vote (services/qa/graph.py).
-    # "ca": the reasoning loop of Google's Conversational Analytics API (services/qa/ca.py)
-    pipeline: str = "ca"
+    # "malt": the dataAgent reasoning loop (services/qa/malt.py)
+    pipeline: str = "malt"
     # vote pipeline: business analysis step before SQL generation (one LLM call per question)
     analyze: bool = True
     # JSON merged over LLM_EXTRA_BODY for the analysis call (vote) or every CA step, e.g. thinking:
@@ -48,13 +48,15 @@ class Settings(BaseSettings):
     min_confidence: float = 0.0
     # dataAgent: solved train examples shown to the query step (0 = none); assets/examples/
     few_shot_k: int = 3
-    # dataAgent self-consistency: runs per question, one approach each (ca_variants.md), majority
-    # vote; answer only when the majority share >= CA_MIN_AGREEMENT (chosen by scripts/calibrate)
-    ca_samples: int = 1
-    ca_min_agreement: float = 0.0
+    # dataAgent self-consistency: runs per question, one approach each (malt_variants.md), majority
+    # vote; answer only when the majority share >= MALT_MIN_AGREEMENT (chosen by scripts/calibrate)
+    malt_samples: int = 1
+    malt_min_agreement: float = 0.0
     # stop sampling once the remaining samples cannot change the answer or the gate (saves time
     # when the first samples agree; the trace's agreement is then a lower bound)
-    ca_early_stop: bool = False
+    malt_early_stop: bool = False
+    # first approach used by sample 0 (malt_variants.md has 6): 3 gives three more independent votes
+    malt_variant_offset: int = 0
 
     # language of the prompts and skills: "en" or "vi" (prompt_templates/vi/, skills/*/SKILL.vi.md)
     prompt_lang: str = "en"

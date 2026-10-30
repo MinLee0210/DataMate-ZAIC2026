@@ -58,6 +58,13 @@ def main() -> int:
     parser.add_argument("--min-votes", type=int, default=0)
     parser.add_argument("--min-share", type=float, default=0.0)
     parser.add_argument("--out", type=Path)
+    parser.add_argument(
+        "--borderline-out",
+        type=Path,
+        help="write the ids whose top answer has between --lo and --hi votes (one id per line)",
+    )
+    parser.add_argument("--lo", type=int, default=3)
+    parser.add_argument("--hi", type=int, default=6)
     args = parser.parse_args()
 
     questions = load_questions(split_dir(args.data, args.split))
@@ -74,6 +81,17 @@ def main() -> int:
         for qid in per_q:  # a run that has no trace for a question votes abstain for its samples
             if qid not in seen:
                 per_q[qid].append(("", None))
+    if args.borderline_out is not None:
+        ids = []
+        for qid, votes in per_q.items():
+            counts = Counter(k for k, _ in votes if k and k != "unanswerable")
+            top = counts.most_common(1)[0][1] if counts else 0
+            if args.lo <= top <= args.hi:
+                ids.append(qid)
+        args.borderline_out.write_text("\n".join(ids) + "\n")
+        span = f"[{args.lo}, {args.hi}]"
+        print(f"{len(ids)} borderline ids (top votes in {span}) -> {args.borderline_out}")
+        return 0
     if args.out is None:
         total = max(len(v) for v in per_q.values())
         print(f"votes per question: up to {total}")

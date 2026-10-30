@@ -1,7 +1,7 @@
-"""Run a short pandas snippet written by the model, as Google's Conversational Analytics API does
+"""Run a short pandas snippet written by the model, as the dataAgent's analysis step does
 for follow-up analysis.
 
-The snippet sees `pd`, `results` (the named DataFrames retrieved earlier, as CA-API's
+The snippet sees `pd`, `results` (the named DataFrames retrieved earlier, as the
 `AnalysisQuery.dataResultNames`), a read-only `query(sql) -> DataFrame` over the business's DuckDB,
 and a small set of builtins. It must assign `result` (DataFrame, Series, list or scalar). Imports,
 dunder and private names, and file or reflection builtins are rejected before it runs. The

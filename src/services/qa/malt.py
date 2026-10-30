@@ -1,4 +1,4 @@
-"""The CA pipeline: the reasoning loop of Google's Conversational Analytics API (CA-API), bounded.
+"""MALT: the dataAgent reasoning loop, bounded.
 
     SCHEMA    schema card, semantic views, resolved time, entity links          (no LLM)
     THOUGHT   reason over the schema: need, term -> field mapping, fields to check (LLM 1)
@@ -10,8 +10,8 @@
     THOUGHT   reason over the new result -> final | abstain                       (LLM 4)
     FINAL     the chosen result, formatted in code as the typed answer            (no LLM)
 
-At most 4 LLM steps per question. CA-API has no abstain; here the last THOUGHT may abstain,
-because a wrong answer costs a point. Every step is kept in the trace as a CA-shaped message
+At most 4 LLM steps per question. The last THOUGHT may abstain,
+because a wrong answer costs a point. Every step is kept in the trace as a message
 (`thought`, `progress`, `data`, `analysis`, `error`, `final`).
 """
 
@@ -49,7 +49,7 @@ PREVIEW_CHARS = 2500
 
 @dataclass
 class DataResult:
-    """A named result, as CA-API's DataResult; `language` is `sql` (DATA) or `python` (ANALYSIS)."""
+    """A named result; `language` is `sql` (DATA) or `python` (ANALYSIS)."""
 
     name: str
     question: str
@@ -184,7 +184,7 @@ def _confidence(value: object) -> float | None:
     return min(max(x, 0.0), 1.0)
 
 
-class CAPipeline:
+class MaltPipeline:
     def __init__(
         self,
         agent: SQLAgent,
@@ -202,6 +202,7 @@ class CAPipeline:
         samples: int = 1,
         min_agreement: float = 0.0,
         early_stop: bool = False,
+        variant_offset: int = 0,
     ) -> None:
         self.agent = agent
         self.seed = seed
@@ -217,18 +218,19 @@ class CAPipeline:
         self.samples = max(1, samples)
         self.min_agreement = min_agreement
         self.early_stop = early_stop
-        self.variants = [v.strip() for v in load_prompt_template("ca_variants").split("\n---\n")]
+        self.variant_offset = variant_offset
+        self.variants = [v.strip() for v in load_prompt_template("malt_variants").split("\n---\n")]
         self._sample = 0
         self._llm_calls = 0
 
     def _think(self, template: str, values: dict[str, str], step: int) -> dict:
         if self._llm_calls >= MAX_LLM_CALLS:
-            raise RuntimeError("CA reasoning call budget exhausted")
+            raise RuntimeError("MALT reasoning call budget exhausted")
         self._llm_calls += 1
         return self.agent.think(
             template,
             values,
-            seed=self.seed + step + 1000 * self._sample,
+            seed=self.seed + step + 1000 * (self.variant_offset + self._sample),
             extra_body=self.extra_body,
             max_tokens=self.max_tokens,
         )
@@ -275,7 +277,7 @@ class CAPipeline:
         self, question: str, as_of: date, business: BusinessContext, source: DuckDBSource
     ) -> tuple[Answer, dict]:
         """One answer; with samples > 1, self-consistency: the loop runs once per approach
-        (`ca_variants.md`) and the answer is the majority. `agreement` = majority share, which
+        (`malt_variants.md`) and the answer is the majority. `agreement` = majority share, which
         the eval's PA-vs-tau curve and `scripts/calibrate.py` use; MIN_AGREEMENT gates it."""
         if self.samples == 1:
             self._sample = 0
@@ -284,7 +286,7 @@ class CAPipeline:
         votes: dict[str, list[Answer]] = {}
         for i in range(self.samples):
             self._sample = i
-            approach = self.variants[i % len(self.variants)]
+            approach = self.variants[(self.variant_offset + i) % len(self.variants)]
             try:
                 answer, t = self._run_once(question, as_of, business, source, approach)
             except Exception as e:  # one failed sample must not discard the others' votes
@@ -312,7 +314,7 @@ class CAPipeline:
             for k, v in t["timings"].items():
                 timings[k] = round(timings.get(k, 0.0) + v, 4)
         trace = {
-            "pipeline": "ca",
+            "pipeline": "malt",
             "samples": [t for _, t in runs],
             "votes": {k: len(v) for k, v in votes.items()},
             "messages": runs[0][1]["messages"],
@@ -355,7 +357,7 @@ class CAPipeline:
 
         # THOUGHT 1: reason over the schema
         started = time.perf_counter()
-        step1 = self._think_or_retry("ca_schema_thought", ctx, step=1)
+        step1 = self._think_or_retry("malt_schema_thought", ctx, step=1)
         thought = str(step1.get("thought", "")).strip()
         messages.append({"type": "thought", "step": 1, "text": thought})
         timed("thought_schema", started)
@@ -376,7 +378,7 @@ class CAPipeline:
         )
         messages.append({"type": "examples", "ids": [e.id for e in shots]})
         step2 = self._think_or_retry(
-            "ca_data_queries",
+            "malt_data_queries",
             {**ctx, "thought": thought, "samples": samples, "examples": render_examples(shots)},
             2,
         )
@@ -402,16 +404,16 @@ class CAPipeline:
         extra_failed = False
         for step in (3, 4, 5):
             if self._llm_calls >= MAX_LLM_CALLS:
-                reason = "CA reasoning call budget exhausted"
+                reason = "MALT reasoning call budget exhausted"
                 break
             last = step == 5 or (step == 4 and not extra_failed)
             started = time.perf_counter()
             data = "\n\n".join([r.render() for r in results.values()] + notes) or "(no results)"
-            actions = load_prompt_template("ca_actions_final" if last else "ca_actions_more")
+            actions = load_prompt_template("malt_actions_final" if last else "malt_actions_more")
             names = ", ".join(f"`{r.name}`" for r in results.values() if not r.error) or "(none)"
             try:
                 reply = self._think(
-                    "ca_results_thought",
+                    "malt_results_thought",
                     {**ctx, "thought": thoughts, "data": data, "actions": actions, "names": names},
                     step,
                 )
@@ -493,7 +495,7 @@ class CAPipeline:
             {"type": "final", "answer": answer.model_dump(), "reason": reason}
         )  # fmt: skip
         trace = {
-            "pipeline": "ca",
+            "pipeline": "malt",
             "messages": json.loads(json.dumps(messages, ensure_ascii=False, default=str)),
             "llm_steps": self._llm_calls,
             "timings": {k: round(v, 4) for k, v in timings.items()},

@@ -303,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
         "subset": args.subset,
         "pipeline": settings.pipeline,
         "thinking": bool(settings.analyze_body)
-        if settings.pipeline == "ca" or settings.analyze
+        if settings.pipeline == "malt" or settings.analyze
         else False,
         "analyze_extra_body": settings.analyze_extra_body,
         "analyze_max_tokens": settings.analyze_max_tokens,

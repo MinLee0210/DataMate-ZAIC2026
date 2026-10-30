@@ -1,4 +1,4 @@
-"""Sample real values of the fields the agent asked for (CA-API's PROGRESS step, "Sampling data
+"""Sample real values of the fields the agent asked for (the PROGRESS step, "Sampling data
 for fields ..."), so the query filters on values that exist. Deterministic, no LLM.
 
 Per field: number of distinct values; the most frequent values (text columns) or min / max

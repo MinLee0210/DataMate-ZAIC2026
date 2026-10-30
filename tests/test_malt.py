@@ -43,7 +43,7 @@ def test_python_needs_result():
         run_python("x = 1", no_query)
 
 
-def ca_replies(final: dict):
+def malt_replies(final: dict):
     def reply(prompt):
         if "first step: reason over the schema" in prompt:
             return json.dumps(
@@ -66,10 +66,10 @@ def ca_replies(final: dict):
     return reply
 
 
-def test_ca_pipeline_answers_from_a_named_result(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
+def test_malt_pipeline_answers_from_a_named_result(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "malt")
     llm = FakeLLM(
-        ca_replies(
+        malt_replies(
             {"thought": "ok", "action": "final", "answer_type": "number", "data_result": "rev"}
         )
     )
@@ -84,8 +84,8 @@ def test_ca_pipeline_answers_from_a_named_result(toy_split, tmp_path, monkeypatc
     assert trace["llm_steps"] == 3 and len(trace["llm"]) == 3
 
 
-def test_ca_pipeline_runs_analysis_then_final(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
+def test_malt_pipeline_runs_analysis_then_final(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "malt")
     replies = iter(
         [
             {
@@ -98,7 +98,7 @@ def test_ca_pipeline_runs_analysis_then_final(toy_split, tmp_path, monkeypatch):
             {"thought": "ok", "action": "final", "answer_type": "number", "data_result": "doubled"},
         ]
     )
-    base = ca_replies({})
+    base = malt_replies({})
     llm = FakeLLM(
         lambda p: json.dumps(next(replies)) if "Reason over the results" in p else base(p)
     )
@@ -107,7 +107,7 @@ def test_ca_pipeline_runs_analysis_then_final(toy_split, tmp_path, monkeypatch):
         toy_split,
         tmp_path,
         FakeLLM(
-            ca_replies(
+            malt_replies(
                 {"thought": "ok", "action": "final", "answer_type": "number", "data_result": "rev"}
             )
         ),
@@ -117,23 +117,31 @@ def test_ca_pipeline_runs_analysis_then_final(toy_split, tmp_path, monkeypatch):
     assert [m["type"] for m in trace["messages"]].count("analysis") == 1
 
 
-def test_ca_pipeline_uses_the_only_result_when_the_name_is_wrong(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
+def test_malt_pipeline_uses_the_only_result_when_the_name_is_wrong(
+    toy_split, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(settings, "pipeline", "malt")
     final = {"thought": "?", "action": "final", "answer_type": "number", "data_result": "missing"}
-    answer, trace = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(malt_replies(final))).answer(
+        question()
+    )
     assert answer.type == "number"
 
 
-def test_ca_pipeline_abstains_when_the_final_cannot_be_formatted(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
+def test_malt_pipeline_abstains_when_the_final_cannot_be_formatted(
+    toy_split, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(settings, "pipeline", "malt")
     final = {"thought": "?", "action": "final", "answer_type": "date", "data_result": "rev"}
-    answer, trace = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(malt_replies(final))).answer(
+        question()
+    )
     assert answer.type == "abstain"
     assert [m["type"] for m in trace["messages"]].count("error") == 2
 
 
 def _results(**frames):
-    from src.services.qa.ca import DataResult
+    from src.services.qa.malt import DataResult
 
     return {n: DataResult(n, "", "sql", "SELECT 1", pd.DataFrame(f)) for n, f in frames.items()}
 
@@ -152,7 +160,7 @@ def _results(**frames):
     ],
 )
 def test_resolve_result(ref, expected):
-    from src.services.qa.ca import resolve_result
+    from src.services.qa.malt import resolve_result
 
     results = _results(
         top_customers={"khach": ["Cty Trương Hoa", "An"], "tien": [9, 5]},
@@ -172,17 +180,19 @@ def test_first_json_object_repairs_invalid_escapes():
 def test_low_confidence_abstains_but_keeps_the_answer_for_the_tau_curve(
     toy_split, tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "pipeline", "malt")
     monkeypatch.setattr(settings, "min_confidence", 0.6)
     final = {"thought": "?", "action": "final", "answer_type": "number", "data_result": "rev",
              "confidence": 0.3}  # fmt: skip
-    answer, trace = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(malt_replies(final))).answer(
+        question()
+    )
     assert answer.type == "abstain"
     assert trace["top"]["type"] == "number" and trace["agreement"] == 0.3
 
 
 def test_confidence_above_the_gate_answers(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "pipeline", "malt")
     monkeypatch.setattr(settings, "min_confidence", 0.6)
     final = {
         "thought": "ok",
@@ -191,24 +201,28 @@ def test_confidence_above_the_gate_answers(toy_split, tmp_path, monkeypatch):
         "data_result": "rev",
         "confidence": 85,
     }  # fmt: skip  (0-100 read as a percent)
-    answer, trace = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(malt_replies(final))).answer(
+        question()
+    )
     assert answer.type == "number" and trace["agreement"] == 0.85
 
 
 def test_unanswerable_without_evidence_gets_zero_confidence(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "pipeline", "malt")
     monkeypatch.setattr(settings, "min_confidence", 0.5)
     final = {"thought": "?", "action": "final", "answer_type": "unanswerable", "reason": "no data",
              "confidence": 0.9}  # fmt: skip
-    answer, trace = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(malt_replies(final))).answer(
+        question()
+    )
     assert answer.type == "abstain" and trace["agreement"] == 0.0
     final["evidence"] = "no column records the delivery date"
-    answer, _ = service_for(toy_split, tmp_path, FakeLLM(ca_replies(final))).answer(question())
+    answer, _ = service_for(toy_split, tmp_path, FakeLLM(malt_replies(final))).answer(question())
     assert answer.type == "unanswerable"
 
 
 def test_a_failed_extra_query_stays_within_call_budget(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "pipeline", "malt")
     replies = iter(
         [
             {
@@ -221,7 +235,7 @@ def test_a_failed_extra_query_stays_within_call_budget(toy_split, tmp_path, monk
             {"thought": "ok", "action": "final", "answer_type": "number", "data_result": "good"},
         ]
     )
-    base = ca_replies({})
+    base = malt_replies({})
     llm = FakeLLM(
         lambda p: json.dumps(next(replies)) if "Reason over the results" in p else base(p)
     )
@@ -243,7 +257,7 @@ def test_a_failed_extra_query_stays_within_call_budget(toy_split, tmp_path, monk
     ],
 )
 def test_infer_action(reply, action):
-    from src.services.qa.ca import infer_action
+    from src.services.qa.malt import infer_action
 
     assert infer_action(reply) == action
 
@@ -269,9 +283,9 @@ def test_example_store_masks_numbers_and_skips_the_asking_family():
 
 
 def test_self_consistency_votes_over_approaches(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
-    monkeypatch.setattr(settings, "ca_samples", 3)
-    monkeypatch.setattr(settings, "ca_min_agreement", 0.6)
+    monkeypatch.setattr(settings, "pipeline", "malt")
+    monkeypatch.setattr(settings, "malt_samples", 3)
+    monkeypatch.setattr(settings, "malt_min_agreement", 0.6)
     # the third approach ("Verify independently") picks a different query result
     replies = []
 
@@ -289,13 +303,13 @@ def test_self_consistency_votes_over_approaches(toy_split, tmp_path, monkeypatch
     answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
     assert answer.type == "number" and answer.value == 5
     assert trace["agreement"] == round(2 / 3, 4) and len(trace["samples"]) == 3
-    monkeypatch.setattr(settings, "ca_min_agreement", 0.9)
+    monkeypatch.setattr(settings, "malt_min_agreement", 0.9)
     answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
     assert answer.type == "abstain" and trace["top"]["value"] == 5
 
 
 def test_money_answers_are_rounded_to_whole_vnd_in_the_pipeline(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "pipeline", "malt")
 
     def reply(prompt):
         if "first step: reason over the schema" in prompt:
@@ -328,10 +342,10 @@ def _approach_replies(sql_for):
 
 
 def test_early_stop_skips_samples_that_cannot_change_the_answer(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
-    monkeypatch.setattr(settings, "ca_samples", 3)
-    monkeypatch.setattr(settings, "ca_min_agreement", 0.6)
-    monkeypatch.setattr(settings, "ca_early_stop", True)
+    monkeypatch.setattr(settings, "pipeline", "malt")
+    monkeypatch.setattr(settings, "malt_samples", 3)
+    monkeypatch.setattr(settings, "malt_min_agreement", 0.6)
+    monkeypatch.setattr(settings, "malt_early_stop", True)
     reply = _approach_replies(lambda p: "SELECT 9" if "Verify independently" in p else "SELECT 5")
     answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
     assert answer.value == 5 and len(trace["samples"]) == 2  # 2 of 3 already decide it
@@ -339,20 +353,20 @@ def test_early_stop_skips_samples_that_cannot_change_the_answer(toy_split, tmp_p
 
 
 def test_early_stop_keeps_sampling_when_the_samples_disagree(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
-    monkeypatch.setattr(settings, "ca_samples", 3)
-    monkeypatch.setattr(settings, "ca_min_agreement", 0.6)
-    monkeypatch.setattr(settings, "ca_early_stop", True)
+    monkeypatch.setattr(settings, "pipeline", "malt")
+    monkeypatch.setattr(settings, "malt_samples", 3)
+    monkeypatch.setattr(settings, "malt_min_agreement", 0.6)
+    monkeypatch.setattr(settings, "malt_early_stop", True)
     reply = _approach_replies(lambda p: "SELECT 9" if "Verify independently" in p else "SELECT 5")
-    monkeypatch.setattr(settings, "ca_min_agreement", 0.9)  # 2 of 3 cannot meet it: no early stop
+    monkeypatch.setattr(settings, "malt_min_agreement", 0.9)  # 2 of 3 cannot meet it: no early stop
     answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
     assert answer.type == "abstain" and len(trace["samples"]) == 3
 
 
 def test_a_failed_sample_does_not_discard_the_other_votes(toy_split, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "pipeline", "ca")
-    monkeypatch.setattr(settings, "ca_samples", 3)
-    monkeypatch.setattr(settings, "ca_min_agreement", 0.6)
+    monkeypatch.setattr(settings, "pipeline", "malt")
+    monkeypatch.setattr(settings, "malt_samples", 3)
+    monkeypatch.setattr(settings, "malt_min_agreement", 0.6)
     good = _approach_replies(lambda p: "SELECT 5")
 
     def reply(prompt):
@@ -383,7 +397,7 @@ def _card():
 
 
 def test_error_hint_names_the_table_that_owns_a_missing_column():
-    from src.services.qa.ca import error_hint
+    from src.services.qa.malt import error_hint
 
     err = 'Binder Error: Table "d" does not have a column named "ma_bill"'
     hint = error_hint("SELECT d.ma_bill FROM don_hang d", _card(), error=err)
@@ -391,8 +405,25 @@ def test_error_hint_names_the_table_that_owns_a_missing_column():
 
 
 def test_error_hint_suggests_the_closest_real_column():
-    from src.services.qa.ca import error_hint
+    from src.services.qa.malt import error_hint
 
     err = 'Binder Error: Referenced column "tien_giam_gia" not found in FROM clause!'
     hint = error_hint("SELECT tien_giam_gia FROM don_hang", _card(), error=err)
     assert "Closest real columns: tien_giam" in hint
+
+
+def test_variant_offset_picks_other_approaches(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "malt")
+    monkeypatch.setattr(settings, "malt_samples", 3)
+    monkeypatch.setattr(settings, "malt_variant_offset", 3)
+    seen = []
+
+    def reply(prompt):
+        if "plan the data queries" in prompt:
+            seen.append(prompt)
+        return _approach_replies(lambda p: "SELECT 5")(prompt)
+
+    service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert len(seen) == 3
+    assert not any("Verify independently" in p for p in seen)
+    assert any("Start from the rulebook" in p for p in seen)

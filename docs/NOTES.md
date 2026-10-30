@@ -2,6 +2,39 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-10-30 - New pod, Vietnamese prompts tested, sample failures, ensemble
+
+- Pod: 2x RTX 5090 (same as the competition machine), one Qwen3.5-9B replica per GPU (fp8 at
+  load, ports 8011 / 8012), run from `/workspace/DataMate-ZAIC2026`. Public halves run in two
+  processes over `--ids` files (even / odd line of `questions.jsonl`).
+- **Vietnamese prompts (`PROMPT_LANG=vi`)**: Vietnamese copies of the dataAgent prompts and skills
+  (`prompt_templates/vi/`, `skills/*/SKILL.vi.md`; JSON keys, actions and SQL stay English).
+  Same code, dev200, k=1, thinking on, two replicas at the same time. On the 82 questions both
+  had finished: **en PA 0.43 (55/20/7), vi PA 0.23 (31/12/39)**. vi used about 2x the completion
+  tokens (7.3k vs 3.4k per question) and abstained far more (Vietnamese thinking runs into the
+  10,240-token cap). English stays the default; vi is kept for a later test with a larger budget.
+  Full en dev200: PA 0.38 (128/52/20), 13 min (last night, other code: 0.415; noise on 200).
+- **Bug: one bad sample lost the whole question.** With k=3, an unparseable reply after the retry
+  raised out of `MaltPipeline.run`, so the question abstained although the other samples had
+  answered: 41 of 1,000 public questions in the 2026-10-28 k=3 run. A failed sample is now an
+  abstain vote.
+- Label-free look at that run's SQL errors: 704 failed queries in 3,000 samples. Most are the model's
+  own mistakes (a column used on the wrong table or alias: `ma_bill` is in `chi_tiet_don`, not
+  `don_hang`; invented columns; `x::T` inside `CAST`). The retry hint now names the table that owns
+  the column, or the closest real column names (`error_hint`).
+- `scripts/ensemble.py`: votes from several runs of one split (every sample of a k>1 trace and
+  every k=1 trace is one vote; a missing or failed sample is an abstain vote). On dev (known
+  answers; k3 + k1 + k1, 5 votes) precision stays 0.83-0.90 whatever the gate, and PA is highest at
+  the loosest gate (2 of 5: 0.595) because dev precision is far above 0.5. Public is not like dev
+  (35 % right at k=1), so public files use a stricter gate; two uploads with different gates
+  measure what the marginal answers are worth.
+- `MALT_VARIANT_OFFSET`: sample i uses approach `(offset + i) % 6`; `malt_variants.md` has 3 new
+  approaches (rulebook-first, two independent computations, defensive about the data). Offset 3
+  gives three votes that differ from the first three, and stays inside the final solution's rules
+  (same model, same code).
+- Not measured: the effect of the sample-failure fix and the column hints on PA. They change which
+  questions get an answer, not what an answered question says.
+
 ## 2026-10-29 - NULL-safe status predicates
 
 - `is_cancelled(NULL)` and `is_returned(NULL)` previously returned SQL NULL. A common valid-order
@@ -12,14 +45,14 @@ Newest at the top. Record *why*, not just *what*.
   This is a verified correctness fix, not a measured PA improvement. A target-model run on a
   clean business-family split is still needed to assess its scoring effect.
 
-## 2026-10-28 - Product architecture review and bounded CA calls
+## 2026-10-28 - Product architecture review and bounded MALT calls
 
-- Compared official Google Conversational Analytics API, Snowflake Cortex Analyst and Databricks
-  Genie architecture documentation in [PRODUCT_ARCHITECTURES.md](PRODUCT_ARCHITECTURES.md).
+- Compared the architectures of hosted analytics products in
+  [PRODUCT_ARCHITECTURES.md](PRODUCT_ARCHITECTURES.md).
 - Their transferable pattern is curated business semantics plus executed queries and isolated
   benchmarks. DataMate's generic semantic layer remains thin, so rulebook metrics are the next
   architecture target.
-- Enforced four actual CA LLM calls per sample, including parse retries. The old failed-query
+- Enforced four actual MALT LLM calls per sample, including parse retries. The old failed-query
   path could use five calls; now it abstains after four. This preserves the documented inference
   budget and makes the trace count reflect calls rather than successful thought messages.
 - Unit tests establish behavior only. PA and runtime effects require a target-model eval.
@@ -93,7 +126,7 @@ Newest at the top. Record *why*, not just *what*.
   does help (Gemma 0.2465 -> 0.3169 cross-fitted). Keep MIN_CONFIDENCE at 0.05 (it only drops
   evidence-less unanswerable).
 - **Self-consistency** (`CA_SAMPLES`, `CA_MIN_AGREEMENT`): the dataAgent loop runs once per
-  approach in `ca_variants.md` (direct; bottom-up from lines; independent pandas check), with
+  approach in `malt_variants.md` (direct; bottom-up from lines; independent pandas check), with
   different seeds; the answer is the majority, `agreement` its share, gated by
   CA_MIN_AGREEMENT. The vote pipeline did this with DeepSeek and reached 91 % right when
   answering. Costs k times the time; measure k = 3 on the folds before using it.
@@ -242,7 +275,7 @@ Newest at the top. Record *why*, not just *what*.
   sampling); kept for determinism, to be checked on the pod by the share of cut-off replies.
 - Why: the user will provide a pod (A40) for the first legal public_test run, then 2× RTX 5090.
 
-## 2026-10-27 - Ingest fixes from error analysis; messy-data skill; CA with thinking
+## 2026-10-27 - Ingest fixes from error analysis; messy-data skill; MALT with thinking
 - Four ingest errors made tables wrong (details and affected businesses:
   [notes/2026-10-27/data-errors/notes.md](notes/2026-10-27/data-errors/notes.md)): dot thousands
   read as decimals, money shorthand (`25k`, `1,5tr`) left as text, tables split by month or part,
@@ -250,28 +283,24 @@ Newest at the top. Record *why*, not just *what*.
   `INGEST_VERSION` (now 3) is part of the cache key.
 - The same knowledge is a skill (`assets/skills/messy-data`): what ingest cleaned, and how to
   check and fix the rest in SQL or pandas, for cases ingest does not catch.
-- CA pipeline with thinking on every step (old ingest): PA 0.55 (122/12/66), 23 s/question. Only
+- MALT pipeline with thinking on every step (old ingest): PA 0.55 (122/12/66), 23 s/question. Only
   12 wrong out of 134 answered (91 %): with thinking, the last THOUGHT abstains when unsure.
 - `python_exec.py` moved to `src/modules/`.
 
-## 2026-10-27 - CA pipeline: the reasoning loop of Google's Conversational Analytics API
-- New `PIPELINE=ca` (`src/services/qa/ca.py`), built on the CA-API message types (REST reference,
-  `Message`): `SchemaMessage` → `TextMessage THOUGHT` → `PROGRESS` (sample field values) →
-  `DataMessage` (named query → SQL → named `DataResult`) → `THOUGHT` on the results →
-  `AnalysisMessage` (Python over named results, `dataResultNames`) or one more `DataMessage` →
-  `FINAL_RESPONSE`. Errors are recoverable and shown to the next THOUGHT, as in CA-API.
-  Reference trace: a CA-API response stream on Looker data (user's work file, not copied here).
+## 2026-10-27 - MALT: a bounded reasoning loop for the dataAgent
+- New `PIPELINE=malt` (`src/services/qa/malt.py`): schema message → THOUGHT → PROGRESS (sample field
+  values) → DATA (named query → SQL → named result) → THOUGHT on the results → ANALYSIS (Python over
+  named results) or one more DATA → FINAL. Errors are recoverable and shown to the next THOUGHT.
 - Bounded for the competition: at most 4 LLM steps (THOUGHT 1 schema, THOUGHT 2 queries,
   THOUGHT 3 results, THOUGHT 4 only after an analysis or extra query). PROGRESS is deterministic
   (`modules/context/sampling.py`): distinct counts, top values, min/max, and the number of rows
   after the as-of date. The final value is formatted in code from the named result.
-- Differences from CA-API: no charts, no natural-language answer, no clarifying questions, and the
-  last THOUGHT may abstain (CA-API has no abstain; PA punishes a wrong answer).
+- No charts, no natural-language answer, no clarifying questions, and the last THOUGHT may abstain
+  (PA punishes a wrong answer).
 - Python analysis runs in `src/modules/python_exec.py`: AST check (no imports, dunder or private
   names, file or reflection builtins), `results`, `pd` and a read-only `query()`, timeout.
-- The vote pipeline stays as `PIPELINE=vote` (default until the CA run is measured).
-- Why: user request, to follow CA-API instead of a self-designed pipeline. The vote pipeline went
-  straight from question to SQL; the intent step of CA-API's QueryData had been trimmed.
+- The vote pipeline stays as `PIPELINE=vote` (default until the MALT run is measured).
+- Why: the vote pipeline went straight from question to SQL; an intent and schema step was missing.
 - Same day, vote pipeline with an analysis step shared by the k candidates (`ANALYZE=true`):
   PA 0.335 vs 0.35 without it. The candidates agree more (9 abstain instead of 36), so wrong
   answers rose from 47 to 62. A shared analysis removes the diversity the vote relies on.
@@ -326,7 +355,7 @@ Newest at the top. Record *why*, not just *what*.
   compared directly.
 
 ## 2026-10-26 - Planned feature: charts in the demo app
-- The demo app will draw a chart next to the answer, as Google's CA-API does. The challenge does
+- The demo app will draw a chart next to the answer, as hosted analytics products do. The challenge does
   not ask for this; it is a product feature for the app's interface.
 - Scope: `app/` and `POST /ask` only. The batch path and `submission.jsonl` stay chart-free, so
   inference time and determinism are unchanged.

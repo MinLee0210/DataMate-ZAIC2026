@@ -12,7 +12,7 @@ It reads what the eval already wrote, so nothing in src/ or scripts/eval.py impo
     $W test --name public-test-qwen3 \
         --submission data/results/<date>/public-test-qwen3/submission.jsonl \
         --trace data/results/<date>/public-test-qwen3/trace.jsonl \
-        --model Qwen/Qwen3-14B-FP8 --pipeline ca --thinking --hardware "1x A40" \
+        --model Qwen/Qwen3-14B-FP8 --pipeline malt --thinking --hardware "1x A40" \
         [--leaderboard-pa 0.12]
 
 WANDB_API_KEY comes from the environment or .env. Test predictions are never uploaded, only
@@ -56,7 +56,7 @@ def _legacy_config(topic: str, summary: str) -> dict:
     workers = re.search(r"--workers (\d+)", summary)
     return {
         "model": model.group(1) if model else "unknown",
-        "pipeline": "ca" if topic.startswith("ca") else "vote",
+        "pipeline": "malt" if topic.startswith(("ca", "malt")) else "vote",
         "thinking": "thinking" in topic,
         "subset": "dev200" if "abstain" not in topic else "ids file",
         "workers": int(workers.group(1)) if workers else 1,
@@ -218,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     te.add_argument("--trace", type=Path)
     te.add_argument("--split", default="public_test")
     te.add_argument("--model", default="Qwen/Qwen3-14B-FP8")
-    te.add_argument("--pipeline", default="ca")
+    te.add_argument("--pipeline", default="malt")
     te.add_argument("--thinking", action="store_true")
     te.add_argument("--hardware", default="")
     te.add_argument("--workers", type=int, default=0)

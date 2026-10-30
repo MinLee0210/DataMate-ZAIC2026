@@ -35,7 +35,7 @@ What goes where:
 
 Two per-question pipelines, chosen by `PIPELINE`:
 
-- `services/qa/ca.py` (`ca`): dataAgent, a bounded reasoning loop.
+- `services/qa/malt.py` (`malt`): dataAgent, a bounded reasoning loop.
   Think on the schema (LLM) → sample the fields it asked for
   (`modules/context/sampling.py`, no LLM) → named data queries (LLM) → DuckDB → think on the
   results (LLM): `final`, `abstain`, a pandas `analysis` (`modules/python_exec.py`) or one more

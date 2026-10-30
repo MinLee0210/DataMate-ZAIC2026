@@ -48,7 +48,7 @@ def build_table_card(
 
 
 def render_schema_card(card: SchemaCard) -> str:
-    """YAML context for the prompt, in the shape of Conversational Analytics authored context."""
+    """YAML context for the prompt, as authored context."""
     tables = []
     for table in card.tables:
         fields = []

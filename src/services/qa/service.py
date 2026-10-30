@@ -9,8 +9,8 @@ from src.modules.agents.sql_agent import SQLAgent
 from src.modules.context import render_schema_card
 from src.modules.context.examples import ExampleStore
 from src.services.ingest import BusinessContext, IngestService
-from src.services.qa.ca import CAPipeline
 from src.services.qa.graph import build_qa_graph
+from src.services.qa.malt import MaltPipeline
 from src.utils import get_logger
 from src.utils.timeparse import LunarCalendar
 
@@ -52,8 +52,8 @@ class QAService:
             analyze_max_tokens=settings.analyze_max_tokens,
         )
 
-        self.ca = (
-            CAPipeline(
+        self.malt = (
+            MaltPipeline(
                 self.agent,
                 seed=settings.seed,
                 schema_text=self._schema_text,
@@ -65,11 +65,12 @@ class QAService:
                 min_confidence=settings.min_confidence,
                 examples=ExampleStore.load() if settings.few_shot_k > 0 else None,
                 few_shot_k=settings.few_shot_k,
-                samples=settings.ca_samples,
-                min_agreement=settings.ca_min_agreement,
-                early_stop=settings.ca_early_stop,
+                samples=settings.malt_samples,
+                min_agreement=settings.malt_min_agreement,
+                early_stop=settings.malt_early_stop,
+                variant_offset=settings.malt_variant_offset,
             )
-            if settings.pipeline == "ca"
+            if settings.pipeline == "malt"
             else None
         )
 
@@ -98,11 +99,11 @@ class QAService:
                 question.business_id, self.package_dir(question.business_id)
             )
             trace["ingest_s"] = round(time.perf_counter() - started, 4)
-            if self.ca is not None:
-                answer, ca_trace = self.ca.run(
+            if self.malt is not None:
+                answer, malt_trace = self.malt.run(
                     question.question, question.as_of_date, business, self._source(business)
                 )
-                trace.update(ca_trace, llm=[u.to_dict() for u in self.agent.llm.pop_usage()])
+                trace.update(malt_trace, llm=[u.to_dict() for u in self.agent.llm.pop_usage()])
                 return answer, trace
             state = self.graph.invoke(
                 {

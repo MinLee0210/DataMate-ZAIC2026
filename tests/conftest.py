@@ -53,7 +53,7 @@ def plan(answer_type, sql):
 def no_analysis_step(monkeypatch):
     """Scripted replies in most tests are SQL plans only; tests of the analysis step turn it on."""
     monkeypatch.setattr(settings, "analyze", False)
-    monkeypatch.setattr(settings, "pipeline", "vote")  # the default is "ca"; ca tests set it
+    monkeypatch.setattr(settings, "pipeline", "vote")  # the default is "malt"; malt tests set it
 
 
 @pytest.fixture
