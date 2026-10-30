@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # JSON merged into every request body, e.g. Qwen3 without thinking on vLLM:
     # '{"chat_template_kwargs": {"enable_thinking": false}}'
     llm_extra_body: str = ""
+    # optional second model that only writes the SQL of MALT's data queries (empty = off)
+    sql_llm_base_url: str = ""
+    sql_llm_model: str = ""
     seed: int = 2026
     # "vote": k SQL candidates + vote (services/qa/graph.py).
     # "malt": the dataAgent reasoning loop (services/qa/malt.py)
@@ -85,6 +88,11 @@ class Settings(BaseSettings):
     def _final_mode_is_offline(self) -> "Settings":
         if self.final_mode and urlparse(self.llm_base_url).hostname not in LOCAL_HOSTS:
             raise ValueError(f"FINAL_MODE=1 needs a local LLM_BASE_URL, got {self.llm_base_url}")
+        if self.final_mode and self.sql_llm_base_url:
+            if urlparse(self.sql_llm_base_url).hostname not in LOCAL_HOSTS:
+                raise ValueError(
+                    f"FINAL_MODE=1 needs a local SQL_LLM_BASE_URL, got {self.sql_llm_base_url}"
+                )
         return self
 
     @property

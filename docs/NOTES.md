@@ -35,6 +35,32 @@ Newest at the top. Record *why*, not just *what*.
 - Not measured: the effect of the sample-failure fix and the column hints on PA. They change which
   questions get an answer, not what an answered question says.
 
+## 2026-10-30 (evening) - Public uploads, gate direction, 27B and 14B checks
+
+- **Public scores today** (all Qwen3.5-9B voting; see submission_log.md #9-#12): agree4of5 (356
+  answered) 0.066; v6 (>= 6 of 8 votes, 465 answered) 0.030; **v7 (>= 7 of 8, 329 answered) 0.084**;
+  v7 + 41 third-pass answers (>= 9 of 11, 370 answered) 0.081. Fewer answers scored higher: the
+  answers added past ~330 are mostly wrong (v6's extra 109 over agree4of5 netted about -36). Public
+  precision at 329 answered is about 63%. The private test has no labels, so keep a strict gate.
+- **Qwen3.5-27B (FP8, TP=2, vi prompts), exploratory, stopped.** About 7 min per question
+  (416 s for the first one), 2-3 questions a minute on both GPUs, so 5-8 h for 1000. Stopped after
+  14 traces of the borderline cascade; over the 15B cap anyway. Back to <= 15B.
+- **Qwen3-14B-FP8 k=3 on dev200** (thinking, en prompts): PA 0.495 (146/47/7), precision 76%,
+  ~390 s/q. Qwen3.5-9B k=3 on the same ids: about 0.52 (144/40/16), 78%, ~150 s/q. No gain from
+  the 14B, so the 9B stays. A 9B + 14B ensemble would be 23B in total: not allowed.
+- **Second model for SQL only (off by default).** `SQL_LLM_BASE_URL` / `SQL_LLM_MODEL` add a
+  `SQLWriter` (src/modules/agents/sql_writer.py): the analyst names the data questions, the
+  specialist writes the SQL, Qwen's own SQL is the fallback. Not run on a GPU yet. It only fits the
+  cap with a small pair (9B + a 3B specialist, or 4B + a 7B one). Specialists found on Hugging Face:
+  OmniSQL 7B/14B/32B, XiYanSQL-QwenCoder 3B/7B/14B/32B, Arctic-Text2SQL-R1-7B. The only Vietnamese
+  text-to-SQL models are unvetted community uploads.
+- **Suggestions received (pasted), status.** Abstain by agreement: done (k=3 votes, gates).
+  Thinking truncation: `ANALYZE_MAX_TOKENS` 10240, vi runs hit it. Literal check (every string
+  literal of the SQL must exist in the data, else fuzzy-match or send back as an error): next.
+  Rulebook with an English gloss per term and an English alias per column in the schema card: not
+  done. SFT / distillation from a teacher on train: not done (no time today). The note to keep
+  instructions in English with Vietnamese data agrees with our en-vs-vi dev result (0.43 vs 0.23).
+
 ## 2026-10-29 - NULL-safe status predicates
 
 - `is_cancelled(NULL)` and `is_returned(NULL)` previously returned SQL NULL. A common valid-order

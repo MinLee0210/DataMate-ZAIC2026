@@ -28,6 +28,7 @@ import pandas as pd
 from src.data.duckdb import DuckDBSource
 from src.models import VALUE_TYPES, Answer, SchemaCard
 from src.modules.agents.sql_agent import PlanParseError, SQLAgent
+from src.modules.agents.sql_writer import SQLWriter
 from src.modules.context.examples import ExampleStore, render_examples
 from src.modules.context.sampling import sample_fields
 from src.modules.decide import Candidate, vote_key
@@ -203,8 +204,10 @@ class MaltPipeline:
         min_agreement: float = 0.0,
         early_stop: bool = False,
         variant_offset: int = 0,
+        sql_writer: SQLWriter | None = None,
     ) -> None:
         self.agent = agent
+        self.sql_writer = sql_writer
         self.seed = seed
         self.schema_text = schema_text
         self.sql_timeout_s = sql_timeout_s
@@ -388,10 +391,34 @@ class MaltPipeline:
         started = time.perf_counter()
         results: dict[str, DataResult] = {}
         for query in (step2.get("data_queries") or [])[:MAX_QUERIES]:
-            if isinstance(query, dict) and query.get("sql"):
+            if not isinstance(query, dict) or not (query.get("sql") or query.get("question")):
+                continue
+            sql = str(query.get("sql") or "")
+            if self.sql_writer is not None and query.get("question"):
+                written = self.sql_writer.write(
+                    {
+                        "schema": self.schema_text(business),
+                        "time": ctx.get("time", ""),
+                        "thought": "\n\n".join(t for t in (thought, thought2) if t),
+                        "samples": samples,
+                        "question": str(query["question"]),
+                    },
+                    seed=self.seed + 2,
+                )
+                messages.append(
+                    {"type": "sql_writer", "name": query.get("name", ""), "sql": written}
+                )
+                if written:
+                    trial = self._run(
+                        source, {}, query.get("name", ""), query["question"], "sql", written,
+                        business.card,
+                    )  # fmt: skip
+                    if trial.error is None or not sql:
+                        sql = written
+            if sql:
                 self._run(
                     source, results, query.get("name", ""), query.get("question", ""), "sql",
-                    query["sql"], business.card,
+                    sql, business.card,
                 )  # fmt: skip
         messages += [r.message() for r in results.values()]
         timed("data", started)

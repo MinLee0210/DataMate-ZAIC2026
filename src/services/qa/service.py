@@ -6,8 +6,10 @@ from src.config import settings
 from src.data.duckdb import DuckDBSource
 from src.models import Answer, Question
 from src.modules.agents.sql_agent import SQLAgent
+from src.modules.agents.sql_writer import SQLWriter
 from src.modules.context import render_schema_card
 from src.modules.context.examples import ExampleStore
+from src.modules.llm import LLM
 from src.services.ingest import BusinessContext, IngestService
 from src.services.qa.graph import build_qa_graph
 from src.services.qa.malt import MaltPipeline
@@ -69,6 +71,11 @@ class QAService:
                 min_agreement=settings.malt_min_agreement,
                 early_stop=settings.malt_early_stop,
                 variant_offset=settings.malt_variant_offset,
+                sql_writer=(
+                    SQLWriter(LLM(settings.sql_llm_model, settings.sql_llm_base_url))
+                    if settings.sql_llm_base_url
+                    else None
+                ),
             )
             if settings.pipeline == "malt"
             else None
