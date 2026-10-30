@@ -347,3 +347,52 @@ def test_early_stop_keeps_sampling_when_the_samples_disagree(toy_split, tmp_path
     monkeypatch.setattr(settings, "ca_min_agreement", 0.9)  # 2 of 3 cannot meet it: no early stop
     answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
     assert answer.type == "abstain" and len(trace["samples"]) == 3
+
+
+def test_a_failed_sample_does_not_discard_the_other_votes(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "ca")
+    monkeypatch.setattr(settings, "ca_samples", 3)
+    monkeypatch.setattr(settings, "ca_min_agreement", 0.6)
+    good = _approach_replies(lambda p: "SELECT 5")
+
+    def reply(prompt):
+        if "Verify independently" in prompt:
+            return "not json at all"  # the third approach cannot be parsed, even after the retry
+        return good(prompt)
+
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert answer.type == "number" and answer.value == 5
+    assert trace["agreement"] == round(2 / 3, 4) and len(trace["samples"]) == 3
+
+
+def _card():
+    from src.models import ColumnCard, SchemaCard, TableCard
+
+    def col(n):
+        return ColumnCard(name=n, original=n, dtype="VARCHAR")
+
+    return SchemaCard(
+        business_id="b",
+        tables=[
+            TableCard(
+                name="don_hang", source="x", rows=1, columns=[col("so_ct"), col("tien_giam")]
+            ),
+            TableCard(name="chi_tiet", source="y", rows=1, columns=[col("ma_bill"), col("cong")]),
+        ],
+    )
+
+
+def test_error_hint_names_the_table_that_owns_a_missing_column():
+    from src.services.qa.ca import error_hint
+
+    err = 'Binder Error: Table "d" does not have a column named "ma_bill"'
+    hint = error_hint("SELECT d.ma_bill FROM don_hang d", _card(), error=err)
+    assert "ma_bill exists in: chi_tiet" in hint and "Columns of don_hang" in hint
+
+
+def test_error_hint_suggests_the_closest_real_column():
+    from src.services.qa.ca import error_hint
+
+    err = 'Binder Error: Referenced column "tien_giam_gia" not found in FROM clause!'
+    hint = error_hint("SELECT tien_giam_gia FROM don_hang", _card(), error=err)
+    assert "Closest real columns: tien_giam" in hint

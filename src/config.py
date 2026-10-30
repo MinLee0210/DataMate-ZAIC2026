@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # when the first samples agree; the trace's agreement is then a lower bound)
     ca_early_stop: bool = False
 
+    # language of the prompts and skills: "en" or "vi" (prompt_templates/vi/, skills/*/SKILL.vi.md)
+    prompt_lang: str = "en"
+
     # FINAL_MODE=1: competition inference, only a local LLM endpoint is allowed
     final_mode: bool = False
 

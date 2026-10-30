@@ -15,6 +15,7 @@ because a wrong answer costs a point. Every step is kept in the trace as a CA-sh
 (`thought`, `progress`, `data`, `analysis`, `error`, `final`).
 """
 
+import difflib
 import json
 import re
 import time
@@ -119,8 +120,29 @@ def resolve_result(results: dict[str, DataResult], ref: object) -> DataResult | 
     return usable[0] if len(usable) == 1 else None
 
 
-def error_hint(code: str, card: SchemaCard | None, max_columns: int = 60) -> str:
-    """Columns (and types) of the tables a failed query names, so the retry can use real names.
+_MISSING_COLUMN = re.compile(r'(?:column named|Referenced column) "([^"]+)"')
+
+
+def _column_hint(error: str, card: SchemaCard) -> str:
+    """For a Binder error about a missing column: the tables that do have that column, or the
+    closest real column names."""
+    m = _MISSING_COLUMN.search(error)
+    if m is None:
+        return ""
+    wanted = m.group(1).split(".")[-1].lower()
+    owners = [t.name for t in card.tables if any(c.name.lower() == wanted for c in t.columns)]
+    if owners:
+        return f"\nColumn {wanted} exists in: {', '.join(owners)} (qualify it with that table)."
+    names = {c.name for t in card.tables for c in t.columns}
+    close = difflib.get_close_matches(wanted, names, n=4, cutoff=0.5)
+    if close:
+        return f"\nNo column {wanted}. Closest real columns: {', '.join(close)}."
+    return f"\nNo column {wanted} in any table: do not invent columns."
+
+
+def error_hint(code: str, card: SchemaCard | None, max_columns: int = 60, error: str = "") -> str:
+    """Columns (and types) of the tables a failed query names, so the retry can use real names;
+    for a missing column also the table that owns it or the closest real names.
     Deterministic, no LLM; empty when the query names no known table."""
     if card is None:
         return ""
@@ -133,7 +155,7 @@ def error_hint(code: str, card: SchemaCard | None, max_columns: int = 60) -> str
     if not lines:
         tables = ", ".join(t.name for t in card.tables)
         lines.append(f"Tables: {tables}")
-    return "\nHint: " + "\n".join(lines)
+    return "\nHint: " + "\n".join(lines) + _column_hint(error, card)
 
 
 def infer_action(reply: dict) -> str:
@@ -245,7 +267,7 @@ class CAPipeline:
                     timeout_s=self.sql_timeout_s,
                 )
         except Exception as e:  # recoverable: shown to the next THOUGHT
-            result.error = f"{type(e).__name__}: {e}" + error_hint(result.code, card)
+            result.error = f"{type(e).__name__}: {e}" + error_hint(result.code, card, error=str(e))
         results[name] = result
         return result
 
@@ -263,7 +285,16 @@ class CAPipeline:
         for i in range(self.samples):
             self._sample = i
             approach = self.variants[i % len(self.variants)]
-            answer, t = self._run_once(question, as_of, business, source, approach)
+            try:
+                answer, t = self._run_once(question, as_of, business, source, approach)
+            except Exception as e:  # one failed sample must not discard the others' votes
+                logger.exception("sample %d failed", i)
+                answer = Answer(type="abstain")
+                t = {
+                    "messages": [{"type": "error", "step": 0, "text": f"{type(e).__name__}: {e}"}],
+                    "llm_steps": self._llm_calls,
+                    "timings": {},
+                }
             runs.append((answer, t))
             if answer.type != "abstain":
                 key = vote_key(Candidate(answer.type, answer.value))
