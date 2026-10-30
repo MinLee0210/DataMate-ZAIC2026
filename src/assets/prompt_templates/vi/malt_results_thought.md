@@ -24,6 +24,9 @@ sửa được:
   trăm (66,01 chứ không phải 0,66), đếm hay tính tiền.
 - Cách viết: trạng thái và khách lẻ phải khớp bằng `is_cancelled`, `is_returned`, `is_walk_in`, không
   chỉ một cách viết. Số đếm hoặc tỉ lệ bằng 0 thường là do bỏ sót một cách viết.
+- Cảnh báo: dòng `Warning: The value ... does not occur in any column` nghĩa là bộ lọc dùng giá trị
+  không có trong dữ liệu, nên kết quả sai hoặc rỗng. Hãy dùng một giá trị thật được liệt kê (hoặc
+  `LIKE`) rồi chạy lại truy vấn.
 - Hình dạng: câu hỏi dạng danh sách trả một cột theo đúng thứ tự được hỏi; "so sánh A với B" trả số
   theo thứ tự A, B; chỉ trả bảng khi câu hỏi cần nhiều cột.
 - Tính hợp lý: so sánh bậc độ lớn với các giá trị mẫu (lỗi gấp ×10, ×100, ×1000).

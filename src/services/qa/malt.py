@@ -20,7 +20,7 @@ import json
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 import pandas as pd
@@ -30,6 +30,7 @@ from src.models import VALUE_TYPES, Answer, SchemaCard
 from src.modules.agents.sql_agent import PlanParseError, SQLAgent
 from src.modules.agents.sql_writer import SQLWriter
 from src.modules.context.examples import ExampleStore, render_examples
+from src.modules.context.literals import MAX_VALUES, ValueIndex, literal_warnings
 from src.modules.context.sampling import sample_fields
 from src.modules.decide import Candidate, vote_key
 from src.modules.python_exec import run_python
@@ -58,6 +59,7 @@ class DataResult:
     code: str
     frame: pd.DataFrame | None = None
     error: str | None = None
+    warnings: list[str] = field(default_factory=list)
 
     def render(self) -> str:
         head = f"### {self.name} ({self.language})\nQuestion: {self.question}\n"
@@ -66,7 +68,8 @@ class DataResult:
             return head + f"Error: {self.error[:800]}"
         assert self.frame is not None
         preview = self.frame.head(PREVIEW_ROWS).to_csv(index=False)[:PREVIEW_CHARS]
-        return head + f"{len(self.frame)} rows. First rows (CSV):\n{preview}"
+        body = head + f"{len(self.frame)} rows. First rows (CSV):\n{preview}"
+        return body + "".join(f"\nWarning: {w}" for w in self.warnings)
 
     def message(self) -> dict:
         rows = None if self.frame is None else len(self.frame)
@@ -77,6 +80,7 @@ class DataResult:
             "code": self.code,
             "rows": rows,
             "error": self.error,
+            "warnings": self.warnings,
         }
 
 
@@ -205,7 +209,9 @@ class MaltPipeline:
         early_stop: bool = False,
         variant_offset: int = 0,
         sql_writer: SQLWriter | None = None,
+        literal_check: bool = True,
     ) -> None:
+        self.literal_check = literal_check
         self.agent = agent
         self.sql_writer = sql_writer
         self.seed = seed
@@ -225,6 +231,7 @@ class MaltPipeline:
         self.variants = [v.strip() for v in load_prompt_template("malt_variants").split("\n---\n")]
         self._sample = 0
         self._llm_calls = 0
+        self._values: dict[str, ValueIndex] = {}
 
     def _think(self, template: str, values: dict[str, str], step: int) -> dict:
         if self._llm_calls >= MAX_LLM_CALLS:
@@ -263,6 +270,7 @@ class MaltPipeline:
         try:
             if language == "sql":
                 result.frame = source.query(result.code, self.sql_timeout_s, self.max_rows)
+                result.warnings = self._literal_warnings(source, card, result.code)
             else:
                 frames = {k: r.frame for k, r in results.items() if r.frame is not None}
                 result.frame = run_python(
@@ -275,6 +283,22 @@ class MaltPipeline:
             result.error = f"{type(e).__name__}: {e}" + error_hint(result.code, card, error=str(e))
         results[name] = result
         return result
+
+    def _literal_warnings(
+        self, source: DuckDBSource, card: SchemaCard | None, code: str
+    ) -> list[str]:
+        """Literals of the query that no column of the business contains (see literals.py)."""
+        if card is None or not self.literal_check:
+            return []
+        try:
+            if card.business_id not in self._values:
+                self._values[card.business_id] = ValueIndex.build(
+                    card, lambda sql: source.query(sql, self.sql_timeout_s, MAX_VALUES)
+                )
+            return literal_warnings(code, self._values[card.business_id])
+        except Exception:  # a warning is a hint; it must never fail the query
+            logger.exception("literal check failed")
+            return []
 
     def run(
         self, question: str, as_of: date, business: BusinessContext, source: DuckDBSource

@@ -1,0 +1,356 @@
+{
+  "config": {
+    "model": "Qwen/Qwen3.5-9B",
+    "split": "train",
+    "subset": "/workspace/dev_h1.txt",
+    "pipeline": "malt",
+    "thinking": true,
+    "analyze_extra_body": "{\"chat_template_kwargs\": {\"enable_thinking\": true}, \"presence_penalty\": 1.5}",
+    "analyze_max_tokens": 10240,
+    "k": 3,
+    "tau": 0.67,
+    "workers": 16,
+    "llm_base_url": "http://127.0.0.1:8012/v1"
+  },
+  "pa": {
+    "n": 100,
+    "pa": 0.35,
+    "correct": 62,
+    "wrong": 27,
+    "abstain": 11
+  },
+  "by_answer_type": {
+    "boolean": {
+      "n": 2,
+      "pa": 0.5,
+      "correct": 1,
+      "wrong": 0,
+      "abstain": 1
+    },
+    "date": {
+      "n": 3,
+      "pa": 1.0,
+      "correct": 3,
+      "wrong": 0,
+      "abstain": 0
+    },
+    "list": {
+      "n": 5,
+      "pa": -0.2,
+      "correct": 2,
+      "wrong": 3,
+      "abstain": 0
+    },
+    "number": {
+      "n": 64,
+      "pa": 0.4219,
+      "correct": 41,
+      "wrong": 14,
+      "abstain": 9
+    },
+    "percent": {
+      "n": 17,
+      "pa": 0.0,
+      "correct": 8,
+      "wrong": 8,
+      "abstain": 1
+    },
+    "string": {
+      "n": 5,
+      "pa": 0.2,
+      "correct": 3,
+      "wrong": 2,
+      "abstain": 0
+    },
+    "unanswerable": {
+      "n": 4,
+      "pa": 1.0,
+      "correct": 4,
+      "wrong": 0,
+      "abstain": 0
+    }
+  },
+  "tau_curve": [
+    [
+      0.0,
+      0.32
+    ],
+    [
+      0.05,
+      0.35
+    ],
+    [
+      0.1,
+      0.35
+    ],
+    [
+      0.15,
+      0.35
+    ],
+    [
+      0.2,
+      0.35
+    ],
+    [
+      0.25,
+      0.35
+    ],
+    [
+      0.3,
+      0.35
+    ],
+    [
+      0.35,
+      0.35
+    ],
+    [
+      0.4,
+      0.35
+    ],
+    [
+      0.45,
+      0.35
+    ],
+    [
+      0.5,
+      0.35
+    ],
+    [
+      0.55,
+      0.35
+    ],
+    [
+      0.6,
+      0.35
+    ],
+    [
+      0.65,
+      0.35
+    ],
+    [
+      0.7,
+      0.35
+    ],
+    [
+      0.75,
+      0.35
+    ],
+    [
+      0.8,
+      0.35
+    ],
+    [
+      0.85,
+      0.35
+    ],
+    [
+      0.9,
+      0.34
+    ],
+    [
+      0.95,
+      0.34
+    ],
+    [
+      1.0,
+      0.02
+    ]
+  ],
+  "verdicts": {
+    "correct": 62,
+    "wrong_value": 24,
+    "abstain": 11,
+    "wrong_type": 3
+  },
+  "diagnostics": {
+    "coverage": 0.89,
+    "selective_accuracy": 0.6966,
+    "oracle_at_k": null,
+    "top_accuracy": 0.6739,
+    "agreement_auroc": 0.6435,
+    "repair_rate": 0.0,
+    "unanswerable_precision": 0.6667,
+    "unanswerable_recall": 1.0,
+    "errors": 4
+  },
+  "efficiency": {
+    "questions": 100,
+    "seconds_per_question": {
+      "n": 100,
+      "total": 5602.715,
+      "mean": 56.0271,
+      "p50": 47.956,
+      "p90": 81.492,
+      "p95": 100.334,
+      "max": 207.746
+    },
+    "questions_per_6h_at_mean": 385,
+    "llm_seconds_per_question": {
+      "n": 100,
+      "total": 5549.7984,
+      "mean": 55.498,
+      "p50": 47.4693,
+      "p90": 81.1994,
+      "p95": 98.8343,
+      "max": 206.1996
+    },
+    "llm_time_share": 0.9906,
+    "ingest_seconds": {
+      "n": 100,
+      "total": 7.4546,
+      "mean": 0.0745,
+      "p50": 0.0187,
+      "p90": 0.2209,
+      "p95": 0.3945,
+      "max": 0.7252
+    },
+    "stage_seconds": {
+      "data": {
+        "n": 96,
+        "total": 26.7644,
+        "mean": 0.2788,
+        "p50": 0.2461,
+        "p90": 0.5831,
+        "p95": 0.6977,
+        "max": 1.0955
+      },
+      "progress": {
+        "n": 96,
+        "total": 6.1754,
+        "mean": 0.0643,
+        "p50": 0.0558,
+        "p90": 0.0995,
+        "p95": 0.1361,
+        "max": 0.2737
+      },
+      "schema": {
+        "n": 96,
+        "total": 6.1793,
+        "mean": 0.0644,
+        "p50": 0.0291,
+        "p90": 0.1854,
+        "p95": 0.2295,
+        "max": 0.3535
+      },
+      "thought_queries": {
+        "n": 96,
+        "total": 1496.5668,
+        "mean": 15.5892,
+        "p50": 13.0975,
+        "p90": 25.1968,
+        "p95": 31.0422,
+        "max": 65.5013
+      },
+      "thought_results": {
+        "n": 96,
+        "total": 2014.6042,
+        "mean": 20.9855,
+        "p50": 15.9628,
+        "p90": 33.7682,
+        "p95": 49.3625,
+        "max": 148.0084
+      },
+      "thought_schema": {
+        "n": 96,
+        "total": 1758.0592,
+        "mean": 18.3131,
+        "p50": 15.7469,
+        "p90": 25.9119,
+        "p95": 27.9347,
+        "max": 169.7893
+      }
+    },
+    "llm_calls": {
+      "total": 324,
+      "per_question": {
+        "n": 100,
+        "total": 324.0,
+        "mean": 3.24,
+        "p50": 3.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "max": 4.0
+      },
+      "failed": 0
+    },
+    "llm_steps": {
+      "per_question": {
+        "n": 100,
+        "total": 315.0,
+        "mean": 3.15,
+        "p50": 3.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "max": 4.0
+      },
+      "over_4": 0
+    },
+    "tokens": {
+      "prompt_total": 4570533,
+      "completion_total": 409376,
+      "prompt_per_question": {
+        "n": 100,
+        "total": 4570533.0,
+        "mean": 45705.33,
+        "p50": 42966.0,
+        "p90": 60768.0,
+        "p95": 63425.0,
+        "max": 81214.0
+      },
+      "completion_per_question": {
+        "n": 100,
+        "total": 409376.0,
+        "mean": 4093.76,
+        "p50": 3497.0,
+        "p90": 5815.0,
+        "p95": 7172.0,
+        "max": 14590.0
+      },
+      "prompt_per_call": {
+        "n": 324,
+        "total": 4570533.0,
+        "mean": 14106.5833,
+        "p50": 13761.0,
+        "p90": 17212.0,
+        "p95": 19718.0,
+        "max": 21506.0
+      },
+      "completion_per_call": {
+        "n": 324,
+        "total": 409376.0,
+        "mean": 1263.5062,
+        "p50": 1044.0,
+        "p90": 1685.0,
+        "p95": 2106.0,
+        "max": 10240.0
+      }
+    },
+    "ttft_seconds": {
+      "n": 324,
+      "total": 158.8122,
+      "mean": 0.4902,
+      "p50": 0.3501,
+      "p90": 0.7944,
+      "p95": 1.3202,
+      "max": 3.6193
+    },
+    "call_latency_seconds": {
+      "n": 324,
+      "total": 5549.7984,
+      "mean": 17.129,
+      "p50": 14.1727,
+      "p90": 23.8458,
+      "p95": 30.2892,
+      "max": 148.0014
+    },
+    "decode_tokens_per_second": {
+      "n": 324,
+      "total": 24762.0279,
+      "mean": 76.426,
+      "p50": 74.7915,
+      "p90": 81.6079,
+      "p95": 91.2278,
+      "max": 134.7742
+    }
+  }
+}

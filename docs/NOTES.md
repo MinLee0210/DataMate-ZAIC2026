@@ -35,6 +35,33 @@ Newest at the top. Record *why*, not just *what*.
 - Not measured: the effect of the sample-failure fix and the column hints on PA. They change which
   questions get an answer, not what an answered question says.
 
+## 2026-10-30 (night) - dev1000 is the reference; dev200 flatters; lists are the weak type
+
+- **dev1000** (1000 random train questions, all 30 shops; `--subset dev1000`), Qwen3.5-9B k=1,
+  thinking on, en prompts, code of `2c33c62`: **PA 0.395** (642 right / 247 wrong / 111 abstain,
+  72 % right when answering). dev200 scored 0.54-0.56 on the same code: dev200 was tuned on and
+  overstates the pipeline by about 0.15. Use dev1000 (or a hold-out) for any claim from now on.
+- **By answer type (dev1000):** number 0.41 (643 q), percent 0.48 (181), date 0.48 (50), string 0.67,
+  unanswerable 0.96 (23 of 24 right), table 0.50 (6), boolean 0.00 (9), **list -0.37 (63 q: 16 right,
+  39 wrong)**. Dropping every list answer would add +0.023 PA; fixing them (order, type, or
+  the top-k rule) is the largest single lever found. Not investigated yet.
+- **Regression on dev200 (k=1, same 200 questions):** code `2c33c62` 0.56 and 0.54 (two runs);
+  `f92ebdd` 0.46; HEAD with literal check off 0.475, on 0.435. The change is somewhere in `e7f442f`
+  / `f92ebdd` (column hints on errors, per-sample handling). Not bisected. Run-to-run noise at k=1 on
+  200 questions is about +-0.04 (44 of 200 questions flip between two nearly identical runs).
+  The literal check (`src/modules/context/literals.py`, `MALT_LITERAL_CHECK`, default on) fired on
+  11 of 200 questions and is neutral. It is NOT in the older code that was used for the
+  paused public run; decide whether to keep it after the bisect on dev1000.
+- **8-vote ensemble on dev200** (5 k=1 runs + the 10-28 k=3 run): >= 7 of 8 votes gives 90.0 %
+  precision on 130 of 200 answered (PA 0.52); >= 4 of 8 gives the best PA 0.63 (86.6 %, 172 answered).
+  Optimistic: dev200 was tuned on.
+- **Public:** v7 (>= 7 of 8, 329 answered) 0.084 remains the best honest upload. The public k=3
+  run with the older code was started at 21:23 and stopped for dev1000 (nothing finished); it was
+  not restarted. Pod stopped for the night at the user's request.
+- Public ids and train ids do not overlap (0 shared ids, 0 shared businesses), but 51 of 1000 public
+  questions equal a train question after masking numbers and 30 % of a 150 sample are >= 0.8
+  similar: the questions come from shared templates.
+
 ## 2026-10-30 (evening) - Public uploads, gate direction, 27B and 14B checks
 
 - **Public scores today** (all Qwen3.5-9B voting; see submission_log.md #9-#12): agree4of5 (356

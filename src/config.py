@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     malt_early_stop: bool = False
     # first approach used by sample 0 (malt_variants.md has 6): 3 gives three more independent votes
     malt_variant_offset: int = 0
+    # warn the model when a query filters on a string value the data does not contain
+    malt_literal_check: bool = True
 
     # language of the prompts and skills: "en" or "vi" (prompt_templates/vi/, skills/*/SKILL.vi.md)
     prompt_lang: str = "en"

@@ -23,6 +23,9 @@ Check these one by one, and abstain when one fails and you cannot fix it:
   0.66), a count vs an amount.
 - Spellings: statuses and walk-in customers matched with `is_cancelled`, `is_returned`,
   `is_walk_in`, not one spelling. A count or share of 0 usually means a missed spelling.
+- Warnings: a line `Warning: The value ... does not occur in any column` means the filter used a
+  value the data does not have, so the result is wrong or empty. Use one of the real values it
+  lists (or `LIKE`), and run the query again.
 - Shape: a list question gets one column in the asked order; "so sánh A với B" gets the numbers
   in the order A, B; a table only when the question asks for several columns.
 - Plausibility: compare the order of magnitude with the sampled values (×10, ×100, ×1000 errors).
