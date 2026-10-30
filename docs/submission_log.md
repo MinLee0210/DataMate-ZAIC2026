@@ -20,6 +20,13 @@ Rules (adopted 2026-10-28):
 | 7 | 2026-10-28 19:15 (ready) | same as #6 | same as #6 | **+ few-shot** (`FEW_SHOT_K=3`, 101 verified train examples) — the only change vs #6 | `2026-10-28/public-test-qwen35-9b-k1-fewshot/` | 834 / 123 / 43 | **-0.261** |
 | 8 | 2026-10-28 ~21:20 (running since 19:45) | same as #6 + money rounding wired into the pipeline | Qwen3.5-9B, dataAgent + thinking, **k=3 self-consistency**, `MIN_CONFIDENCE` 0.35, no few-shot | vs #6: k=1 → k=3 with the agreement gate (dev200 PA 0.415 → 0.520 for k=3; cross-fitted tau 0.35 adds +0.028 on development). Money rounding also changed (affects ~2 answers on #6) | `2026-10-28/public-test-qwen35-9b-k3/` | – | (to upload) |
 
+| 9 | 2026-10-30 | f92ebdd | Qwen3.5-9B k=3 (10-28 run), gate 4 of 5 | agreement gate on the 10-28 k=3 run | `2026-10-28/public-test-qwen35-9b-k3-agree4of5/` | 356 / – / – | **0.066** |
+| 10 | 2026-10-30 ~14:30 | f92ebdd | MALT, vote of 8 (k3 + k1 + k1-fewshot + new k3), >= 6 votes | ensemble of 4 runs | `2026-10-30/public-test-ensemble-v6/` | 465 / – / – | 0.030 |
+| 11 | 2026-10-30 ~15:10 | f92ebdd | same, >= 7 votes | stricter gate than #10 | `2026-10-30/public-test-ensemble-v7/` | 329 / – / – | **0.084** (best) |
+| 12 | 2026-10-30 ~15:45 | f92ebdd | v7 + 41 answers from a borderline third pass (>= 9 of 11 votes) | third pass on 252 questions with variant offset 3 | `2026-10-30/public-test-ensemble-final/` | 370 / – / – | 0.081 |
+
+Pattern on 2026-10-30: fewer answers scored higher (465: 0.030, 356: 0.066, 329: 0.084); the 41 extra answers from the third pass were net -3. Estimated public precision about 63% at 329 answered.
+
 Notes:
 - Uploads 2, 3 and 5 sent public_test questions to the hosted DeepSeek API at the user's request
   (exception to CLAUDE.md rule 3, logged in NOTES.md). The final solution runs offline.
