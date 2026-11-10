@@ -67,7 +67,7 @@ def build_context(
     lunar: LunarCalendar | None = None,
 ) -> dict[str, str]:
     """Prompt sections for one question: README, schema card, semantic views, resolved time,
-    entity links. Deterministic, no LLM; shared by the vote and the CA pipelines."""
+    entity links. Deterministic, no LLM; shared by the vote and the MALT pipelines."""
     ranges = resolve(question, as_of_date, lunar)
     matches = link_entities(question, business.entities)
     return {

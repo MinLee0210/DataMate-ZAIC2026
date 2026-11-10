@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # LLM: hosted OpenAI-compatible provider in dev_free, local vLLM in dev_constraint / final
     llm_base_url: str = "http://127.0.0.1:8001/v1"
     llm_model: str = "Qwen/Qwen3.5-9B"
+    # data-parallel replicas: comma-separated base URLs (one vLLM per GPU); worker thread i uses
+    # URL i mod n. Empty = every thread uses LLM_BASE_URL.
+    llm_base_urls: str = ""
     llm_api_key: str = "EMPTY"
     llm_temperature: float = 0.0
     llm_max_tokens: int = 1024
@@ -40,7 +43,8 @@ class Settings(BaseSettings):
     pipeline: str = "malt"
     # vote pipeline: business analysis step before SQL generation (one LLM call per question)
     analyze: bool = True
-    # JSON merged over LLM_EXTRA_BODY for the analysis call (vote) or every CA step, e.g. thinking:
+    # JSON merged over LLM_EXTRA_BODY for the analysis call (vote) or every MALT step, e.g.
+    # thinking:
     # DeepSeek '{"thinking": {"type": "enabled"}}',
     # vLLM Qwen3 '{"chat_template_kwargs": {"enable_thinking": true}}'
     analyze_extra_body: str = ""
@@ -62,6 +66,9 @@ class Settings(BaseSettings):
     malt_variant_offset: int = 0
     # warn the model when a query filters on a string value the data does not contain
     malt_literal_check: bool = True
+    # stricter agreement/confidence for some answer types, as JSON, e.g. '{"list": 1.0}'
+    # (empty = every type uses the global gate). Lists scored -0.37 on dev1000.
+    malt_type_gates: str = ""
 
     # language of the prompts and skills: "en" or "vi" (prompt_templates/vi/, skills/*/SKILL.vi.md)
     prompt_lang: str = "en"
@@ -90,6 +97,9 @@ class Settings(BaseSettings):
     def _final_mode_is_offline(self) -> "Settings":
         if self.final_mode and urlparse(self.llm_base_url).hostname not in LOCAL_HOSTS:
             raise ValueError(f"FINAL_MODE=1 needs a local LLM_BASE_URL, got {self.llm_base_url}")
+        for url in self.llm_urls:
+            if self.final_mode and urlparse(url).hostname not in LOCAL_HOSTS:
+                raise ValueError(f"FINAL_MODE=1 needs local LLM_BASE_URLS, got {url}")
         if self.final_mode and self.sql_llm_base_url:
             if urlparse(self.sql_llm_base_url).hostname not in LOCAL_HOSTS:
                 raise ValueError(
@@ -100,6 +110,17 @@ class Settings(BaseSettings):
     @property
     def extra_body(self) -> dict:
         return json.loads(self.llm_extra_body) if self.llm_extra_body else {}
+
+    @property
+    def llm_urls(self) -> list[str]:
+        """The replica URLs; LLM_BASE_URL alone when LLM_BASE_URLS is empty."""
+        urls = [u.strip() for u in self.llm_base_urls.split(",") if u.strip()]
+        return urls or [self.llm_base_url]
+
+    @property
+    def type_gates(self) -> dict[str, float]:
+        gates = json.loads(self.malt_type_gates) if self.malt_type_gates else {}
+        return {str(k): float(v) for k, v in gates.items()}
 
     @property
     def analyze_body(self) -> dict:

@@ -8,13 +8,14 @@ Everything document-related lives in `docs/`. Nothing that is a document
 ```
 docs/
 ├── CHALLENGE.md          the challenge: task, data, answer format, scoring, limits, timeline
+├── EVALUATION.md         Penalized Accuracy: matching rule per answer type, string normalization
 ├── PROJECT.md            competition spec
 ├── RESEARCH.md           research question, hypotheses, method
 ├── MODELS.md             models used at inference + parameter budget
 ├── NOTES.md              decisions log (append newest at top)
 ├── EXPERIMENTS.md        runbook for gated experiments
 ├── PLAN.md               next steps as handoff tasks (T1..T16) for another agent
-├── SUGGESTIONS.md        backlog of later improvements (CA-API mapping, products, research)
+├── SUGGESTIONS.md        backlog of later improvements (products, research)
 ├── analysis/             analysis artifacts
 │   └── <yyyy-mm-dd>/<topic>/...{md|txt|csv|png|...}
 ├── notes/                decision notes

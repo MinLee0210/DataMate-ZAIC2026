@@ -129,7 +129,7 @@ crash and never a guess.
 2. **Rulebook.** Fill `skills/business-metrics` and `assets/semantic/*.sql`.
 3. **Calendar.** The lunar calendar is ingested as table `lunar_calendar` when the split has
    `calendar.*`; lunar phrases are not parsed in Python yet.
-4. **Few-shot verified queries** from the teacher (CA golden queries), retrieved by similarity.
+4. **Few-shot verified queries** from the teacher, retrieved by similarity.
 5. **4th LLM step**: a pairwise selector or verifier on low-agreement questions only (N-rep).
 6. **Relationships**: infer join keys and add them to the schema card.
 7. **Docker**: pin the vLLM image for Blackwell, bake the weights, `make rerun-check` on the GPU.

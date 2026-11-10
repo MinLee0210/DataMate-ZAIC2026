@@ -39,7 +39,7 @@ PA = (1/N) Σ s_i, with s_i = +1 correct, 0 abstain or missing, −1 wrong.
 | Reproducibility | \|PA_upload − PA_rerun\| ≤ 0.03, logs must explain differences |
 | Data | train + self-synthesized + public data; never public/private test |
 
-## 4. Architecture (Conversational-Analytics-style, trimmed)
+## 4. Architecture
 ```
 data pkg ─► INGEST (headers, sheets, merged cells, types) ─► DuckDB
          ─► AUTO-AUTHORED CONTEXT
@@ -54,7 +54,7 @@ question ─► TIME RESOLVER ─► ENTITY LINKING
          ─► DECIDE: answer | abstain (agreement < tau) | unanswerable (missing concept or column)
          ─► FORMAT ─► append to submission.jsonl
 ```
-Dropped from Google CA: clarifying questions, charts, long-form answers, long agent loops.
+Not built: clarifying questions, charts, long-form answers, long agent loops.
 Kept: authored context as the main lever, plus an execution-grounded answer.
 
 ## 5. Phases

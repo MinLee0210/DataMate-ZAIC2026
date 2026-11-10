@@ -13,6 +13,7 @@ are decided, so with N > 1 the file order differs from the questions file; scori
 """
 
 import argparse
+import itertools
 import json
 import os
 import threading
@@ -29,6 +30,8 @@ from src.data.layout import (
     split_dir,
 )
 from src.models import Answer, Question, SubmissionLine
+from src.modules.agents.sql_agent import SQLAgent
+from src.modules.llm import LLM
 from src.services.ingest import IngestService
 from src.services.qa import QAService
 from src.utils import get_logger
@@ -76,9 +79,17 @@ def main(argv: list[str] | None = None) -> int:
     def package_dir(business_id: str) -> Path:
         return business_dir(root, business_id)
 
+    replica = itertools.count()
+    replica_lock = threading.Lock()
+    urls = settings.llm_urls
+
     def new_service() -> QAService:
+        """One service per worker thread; thread i talks to replica i mod n (one vLLM per GPU)."""
+        with replica_lock:
+            url = urls[next(replica) % len(urls)]
+        agent = SQLAgent(llm=LLM(base_url=url), rulebook=rulebook.read_text() if rulebook else "")
         return QAService(
-            IngestService(settings.work_dir, calendar=calendar), package_dir, rulebook=rulebook
+            IngestService(settings.work_dir, calendar=calendar), package_dir, agent=agent
         )
 
     # build every ingest cache before the threads start
@@ -94,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         len(questions),
         len(todo),
         settings.llm_model,
-        settings.llm_base_url,
+        ",".join(urls),
         settings.k,
         settings.tau,
         args.workers,

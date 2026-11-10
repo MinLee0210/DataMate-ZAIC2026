@@ -15,9 +15,9 @@ logged to W&B and NOTES.md; Google Chat ping every 100 questions and at the end.
    traces in `/tmp/dm-fold*/trace.partial.jsonl`): cross-fitted threshold
    (`scripts/calibrate.py`) and a bigger few-shot store (`scripts/datagen/build_examples.py`,
    from about 100 to about 1,000 verified examples).
-2. [ ] **Self-consistency k=3** (`CA_SAMPLES=3`, sync the code to the pod first) on
+2. [ ] **Self-consistency k=3** (`MALT_SAMPLES=3`, sync the code to the pod first) on
    `development200`: PA, wrong answers, abstentions, seconds per question; pick
-   `CA_MIN_AGREEMENT` by cross-fit. Expected: fewer wrong answers (the vote pipeline reached
+   `MALT_MIN_AGREEMENT` by cross-fit. Expected: fewer wrong answers (the vote pipeline reached
    91 % right when answering).
 3. [ ] **Few-shot with the bigger store** on `development200`, compared with #2's 101 examples.
 4. [ ] **Qwen3-14B-FP8 with today's code** (thinking + `presence_penalty`) on `development200`,
@@ -33,7 +33,7 @@ The user provides a pod (A40, 48 GB) with its SSH config. Goal: the first legal 
 submission with the target model, and the real dev200 PA of Qwen3-14B. Every number so far is
 from hosted `deepseek-flash`. Runbook: [scripts/pod/README.md](../scripts/pod/README.md).
 
-Where we are (2026-10-27): dataAgent (`PIPELINE=ca`) with thinking is the best setup, dev200 PA
+Where we are (2026-10-27): MALT (`PIPELINE=malt`) with thinking is the best setup, dev200 PA
 0.55 (122 right / 12 wrong / 66 abstain) on deepseek-flash, measured **before** the four ingest
 fixes. Public leaderboard: −0.169, then −0.023 (deepseek-flash, vote pipeline + rulebook).
 
@@ -80,9 +80,7 @@ Also open, not blocking the pod run:
   and semantic views from the rulebook (T2, T3).
 - Hold-out by business or shop type before any fine-tuning on train (dev200 overlaps train
   businesses).
-- Rename `PIPELINE=ca` / `ca.py` / `ca_*.md` to dataAgent if the user wants it.
-- The default `PIPELINE` in `src/config.py` is still `vote`; switch to `ca` once the pod results
-  confirm it.
+- Renamed to MALT (`PIPELINE=malt`, `src/services/qa/malt.py`); it is the default `PIPELINE`.
 
 ## 0. Read first
 
@@ -151,7 +149,7 @@ in its context.
 **Steps.**
 - Fill `business-metrics` from rulebook §1 (orders and revenue), §4 (debt) and §5 (stock, purchases,
   cost of goods). Write each term as *term → Vietnamese synonyms → definition → which semantic
-  view implements it* (CA-style glossary).
+  view implements it*.
 - Update `ranking-rules` from §3 (customer identity, walk-in customers, service-fee lines, tie
   rules) and the list/table ordering rules in §9.
 - Update `unanswerable` from §7. The key point: no data is different from 0.

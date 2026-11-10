@@ -1,6 +1,6 @@
 # Data errors found in error analysis (2026-10-27)
 
-Source: the 54 wrong answers of the CA pipeline on train dev200
+Source: the 54 wrong answers of the MALT pipeline on train dev200
 (`docs/analysis/2026-10-27/ca/scored.jsonl`). Train only; public_test has no labels and was not
 looked at. Several wrong answers were not model errors: the tables the model saw were wrong.
 Four ingest errors were found, fixed in code (deterministic) and described in the `messy-data`

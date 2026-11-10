@@ -210,8 +210,10 @@ class MaltPipeline:
         variant_offset: int = 0,
         sql_writer: SQLWriter | None = None,
         literal_check: bool = True,
+        type_gates: dict[str, float] | None = None,
     ) -> None:
         self.literal_check = literal_check
+        self.type_gates = type_gates or {}
         self.agent = agent
         self.sql_writer = sql_writer
         self.seed = seed
@@ -232,6 +234,11 @@ class MaltPipeline:
         self._sample = 0
         self._llm_calls = 0
         self._values: dict[str, ValueIndex] = {}
+
+    def _gate(self, answer_type: str, base: float) -> float:
+        """The agreement (or confidence) an answer of this type needs: the global gate, or the
+        stricter one set for the type (`MALT_TYPE_GATES`, e.g. list answers score below zero)."""
+        return max(base, self.type_gates.get(answer_type, 0.0))
 
     def _think(self, template: str, values: dict[str, str], step: int) -> dict:
         if self._llm_calls >= MAX_LLM_CALLS:
@@ -333,9 +340,8 @@ class MaltPipeline:
         top = max(votes.values(), key=len)[0] if votes else None  # first-seen wins ties
         # a lower bound when the loop stopped early: the samples not run are counted as dissent
         agreement = round(max(map(len, votes.values())) / self.samples, 4) if votes else 0.0
-        final = (
-            top if top is not None and agreement >= self.min_agreement else Answer(type="abstain")
-        )
+        gate = self._gate(top.type, self.min_agreement) if top is not None else 0.0
+        final = top if top is not None and agreement >= gate else Answer(type="abstain")
         timings: dict[str, float] = {}
         for _, t in runs:
             for k, v in t["timings"].items():
@@ -360,7 +366,9 @@ class MaltPipeline:
             return False
         counts = sorted((len(v) for v in votes.values()), reverse=True)
         second = counts[1] if len(counts) > 1 else 0
-        return counts[0] > second + remaining and counts[0] / self.samples >= self.min_agreement
+        lead = max(votes.values(), key=len)[0]
+        gate = self._gate(lead.type, self.min_agreement)
+        return counts[0] > second + remaining and counts[0] / self.samples >= gate
 
     def _run_once(
         self,
@@ -540,8 +548,9 @@ class MaltPipeline:
 
         top = answer if answer.type != "abstain" else None
         score = 1.0 if confidence is None else confidence
-        if top is not None and score < self.min_confidence:
-            answer, reason = Answer(type="abstain"), f"confidence {score} < {self.min_confidence}"
+        gate = self._gate(top.type, self.min_confidence) if top is not None else 0.0
+        if top is not None and score < gate:
+            answer, reason = Answer(type="abstain"), f"confidence {score} < {gate}"
         messages.append(
             {"type": "final", "answer": answer.model_dump(), "reason": reason}
         )  # fmt: skip

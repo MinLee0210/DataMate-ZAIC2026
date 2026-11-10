@@ -308,6 +308,34 @@ def test_self_consistency_votes_over_approaches(toy_split, tmp_path, monkeypatch
     assert answer.type == "abstain" and trace["top"]["value"] == 5
 
 
+def test_type_gate_is_stricter_for_one_answer_type(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "malt")
+    monkeypatch.setattr(settings, "malt_samples", 3)
+    monkeypatch.setattr(settings, "malt_min_agreement", 0.6)
+
+    def reply(prompt):
+        if "first step: reason over the schema" in prompt:
+            return json.dumps({"thought": "t", "sample_fields": []})
+        if "plan the data queries" in prompt:
+            sql = "SELECT 9" if "Verify independently" in prompt else "SELECT 5"
+            return json.dumps({"thought": "q", "data_queries": [{"name": "r", "sql": sql}]})
+        return json.dumps(
+            {"thought": "ok", "action": "final", "answer_type": "number", "data_result": "r"}
+        )
+
+    # 2 of 3 agree (0.67): enough for the global gate 0.6
+    answer, _ = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert answer.value == 5
+    # a stricter gate for numbers abstains but keeps the top answer for the tau curve
+    monkeypatch.setattr(settings, "malt_type_gates", '{"number": 0.9}')
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert answer.type == "abstain" and trace["top"]["value"] == 5
+    # a gate on another type changes nothing
+    monkeypatch.setattr(settings, "malt_type_gates", '{"list": 1.0}')
+    answer, _ = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert answer.value == 5
+
+
 def test_money_answers_are_rounded_to_whole_vnd_in_the_pipeline(toy_split, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "pipeline", "malt")
 
@@ -427,3 +455,16 @@ def test_variant_offset_picks_other_approaches(toy_split, tmp_path, monkeypatch)
     assert len(seen) == 3
     assert not any("Verify independently" in p for p in seen)
     assert any("Start from the rulebook" in p for p in seen)
+
+
+def test_replica_urls_and_final_mode(monkeypatch):
+    from src.config import Settings
+
+    assert Settings(llm_base_url="http://127.0.0.1:8001/v1").llm_urls == [
+        "http://127.0.0.1:8001/v1"
+    ]
+    two = Settings(llm_base_urls="http://127.0.0.1:8011/v1, http://127.0.0.1:8012/v1")
+    assert two.llm_urls == ["http://127.0.0.1:8011/v1", "http://127.0.0.1:8012/v1"]
+    with pytest.raises(ValueError, match="local"):
+        Settings(final_mode=True, llm_base_urls="http://127.0.0.1:8011/v1,http://example.com/v1")
+    assert Settings(malt_type_gates='{"list": 1}').type_gates == {"list": 1.0}

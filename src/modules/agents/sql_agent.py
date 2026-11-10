@@ -145,7 +145,7 @@ class SQLAgent(BaseAgent):
         extra_body: dict | None = None,
         max_tokens: int | None = None,
     ) -> dict:
-        """One reasoning step of the CA pipeline: render `template`, return the JSON reply.
+        """One reasoning step of the MALT pipeline: render `template`, return the JSON reply.
 
         Raises PlanParseError when the reply holds no JSON object.
         """

@@ -68,7 +68,7 @@ curl -s http://127.0.0.1:8001/v1/models                 # ready when this answer
 
 ```bash
 uv run python -m notebooks.llm_call --id q_001883280e83
-make eval SUBSET=dev200 TOPIC=qwen3-ca-thinking WORKERS=8
+make eval SUBSET=dev200 TOPIC=qwen3-malt-thinking WORKERS=8
 ```
 
 Look at PA, the share of questions with errors (cut-off thinking, bad JSON) and seconds per

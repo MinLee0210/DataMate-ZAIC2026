@@ -72,6 +72,7 @@ class QAService:
                 early_stop=settings.malt_early_stop,
                 variant_offset=settings.malt_variant_offset,
                 literal_check=settings.malt_literal_check,
+                type_gates=settings.type_gates,
                 sql_writer=(
                     SQLWriter(LLM(settings.sql_llm_model, settings.sql_llm_base_url))
                     if settings.sql_llm_base_url

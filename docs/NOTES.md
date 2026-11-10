@@ -2,6 +2,37 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-11-10 - Trial changes: shipped config = measured config, type gates, intent diagnostic
+
+Nothing here was run on a GPU or scored. These are switches to try; PA effects are unmeasured.
+
+- **Why.** Many teams reportedly score above 0.9 in the small-model track, so the 0.084 ensemble is
+  far from the ceiling. A read of the code found the shipped path differed from the measured one:
+  `infer.sh` set no k-sampling, gate or `presence_penalty`; the best pod scripts still used the old
+  names `PIPELINE=ca` / `CA_SAMPLES`, which the MALT rename (`MALT_SAMPLES`) silently ignores (k=1,
+  no gate); the pod ran two TP=1 replicas, `vllm.sh` one TP=2 server; the Dockerfile pinned vLLM
+  v0.11.0, older than the 0.17 that Qwen3.5 needs.
+- **`scripts/final.env`** (sourced by `infer.sh`; the environment overrides it): model, 2 replicas,
+  28 threads, thinking on with `presence_penalty` 1.5, `MALT_SAMPLES` 8, gate 0.875 (7 of 8),
+  early stop. The sample count and gates are untested defaults. No reasoning parser is set, as on
+  the pod runs; test `REASONING_PARSER=qwen3` separately.
+- **`LLM_BASE_URLS`** (comma-separated): thread i talks to replica i mod n, so one process replaces
+  the two `--ids` halves and `submission.jsonl` has one writer. `FINAL_MODE` checks each URL.
+- **`MALT_TYPE_GATES`** (JSON, empty = off): stricter agreement or confidence for one answer type,
+  e.g. `{"list": 1.0}`. Lists scored -0.37 and booleans 0.0 on dev1000. Early stop uses the leading
+  answer's gate.
+- **Dockerfile:** `VLLM_IMAGE` has no default; `docker-build.sh` requires it. Use the vLLM version
+  that served the model on the pod, pinned by digest.
+- **`scripts/diagnose_intents.py`:** intent mix of train and public (no shift except more customer
+  and top-item questions in public) and precision per intent on dev1000: revenue 0.75 (30 % of
+  questions; 36 of 56 wrong answers within 5 % of gold), debt 0.21, average order 0.59, customer
+  0.65. Surface templates are not shared (2,202 skeletons for 3,000 train questions; 5 % of public
+  questions match one exactly), so a plain template matcher will not work.
+- **Open lead:** biz_127 Q2-2026 revenue, gold 3,267,042,000; line sum of valid orders 3,004,885,000
+  and order total of completed orders 3,234,907,000 both miss it. Shop conventions the generic
+  `business-metrics` skill does not capture are the likeliest cause; next step is to search
+  candidate definitions per shop against train gold.
+
 ## 2026-10-30 - New pod, Vietnamese prompts tested, sample failures, ensemble
 
 - Pod: 2x RTX 5090 (same as the competition machine), one Qwen3.5-9B replica per GPU (fp8 at
