@@ -16,6 +16,11 @@ and regression evidence after it. DataMate has ingestion, schema cards, examples
 its semantic layer currently covers only text folding and status predicates. Numeric business
 rules are still reconstructed in prompts and generated SQL. That is the largest architectural gap.
 
+*Update 2026-11-11:* the gap is partly closed. Ingest now binds column roles per shop and
+generates `v_sales`, `v_orders`, `v_products`, `v_stock` and `v_purchases`, so rulebook §1 (valid
+orders, line totals, order date) and §3 (a customer is a code) run in SQL. Debt, stock as-of and
+per-sector rules are still prompt-only. See docs/NOTES.md, 2026-11-11.
+
 The products also offer features outside this task: managed governance, multi-turn conversation,
 charts, broad tool orchestration and hosted model selection. The challenge's offline, 15B-model,
 six-hour and one-line-answer constraints make those poor immediate investments.

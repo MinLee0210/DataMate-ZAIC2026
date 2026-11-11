@@ -1,4 +1,6 @@
 import json
+import os
+import warnings
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -6,6 +8,24 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+# PIPELINE names: "malt" is the dataAgent; "vote" is the older k-candidate pipeline. The pod
+# scripts used "ca" before the rename and it silently ran the vote pipeline, so legacy names are
+# mapped explicitly and an unknown name fails instead of falling through.
+PIPELINE_ALIASES = {
+    "malt": "malt",
+    "ca": "malt",
+    "dataagent": "malt",
+    "vote": "vote",
+    "graph": "vote",
+}
+# env names that the rename retired; silently ignored by pydantic, so they are warned about here
+LEGACY_ENV = (
+    "CA_SAMPLES",
+    "CA_MIN_AGREEMENT",
+    "CA_EARLY_STOP",
+    "CA_VARIANT_OFFSET",
+    "CA_TYPE_GATES",
+)
 
 
 class Settings(BaseSettings):
@@ -69,6 +89,24 @@ class Settings(BaseSettings):
     # stricter agreement/confidence for some answer types, as JSON, e.g. '{"list": 1.0}'
     # (empty = every type uses the global gate). Lists scored -0.37 on dev1000.
     malt_type_gates: str = ""
+    # a final reply without `confidence` used to count as certainty (1.0); 0.5 is neutral
+    malt_missing_confidence: float = 0.5
+    # an unanswerable answer without `evidence` used to become 0.0 and then abstain under any gate;
+    # cap it instead, so the guard survives without discarding a rulebook §7 answer
+    malt_unanswerable_cap: float = 0.5
+    # read the answer shape from the wording (list vs table vs scalar) and say it in the prompt
+    answer_shape: bool = True
+    # answer "unanswerable" with no LLM call when every period in the question is outside the data
+    premise_check: bool = True
+    # characters of the shop's README kept in the prompt; the conventions section is always kept
+    readme_chars: int = 4000
+    # answer high-volume families with deterministic SQL over the semantic views (no LLM call)
+    family_compiler: bool = True
+    # families the compiler may answer (comma separated; empty = all it recognises)
+    compiler_families: str = (
+        "revenue_plain,avg_order,best_day,count_cancelled,count_orders,"
+        "count_orders_threshold,growth_plain"
+    )
 
     # language of the prompts and skills: "en" or "vi" (prompt_templates/vi/, skills/*/SKILL.vi.md)
     prompt_lang: str = "en"
@@ -92,6 +130,28 @@ class Settings(BaseSettings):
     workers: int = 1
     # stop answering (abstain) after this many seconds, leaving margin inside the 6 h limit
     time_budget_s: float = 4.5 * 3600
+
+    @model_validator(mode="after")
+    def _pipeline_is_known(self) -> "Settings":
+        name = (self.pipeline or "").strip().lower()
+        if name not in PIPELINE_ALIASES:
+            raise ValueError(
+                f"PIPELINE must be one of {sorted(PIPELINE_ALIASES)}, got {self.pipeline!r}"
+            )
+        if PIPELINE_ALIASES[name] != name:
+            warnings.warn(
+                f"PIPELINE={self.pipeline!r} is a legacy name; using {PIPELINE_ALIASES[name]!r}",
+                stacklevel=2,
+            )
+        self.pipeline = PIPELINE_ALIASES[name]
+        legacy = [key for key in LEGACY_ENV if key in os.environ]
+        if legacy:
+            warnings.warn(
+                f"ignoring retired env names {legacy}: use the MALT_* ones (MALT_SAMPLES, "
+                "MALT_MIN_AGREEMENT, MALT_EARLY_STOP, MALT_VARIANT_OFFSET, MALT_TYPE_GATES)",
+                stacklevel=2,
+            )
+        return self
 
     @model_validator(mode="after")
     def _final_mode_is_offline(self) -> "Settings":

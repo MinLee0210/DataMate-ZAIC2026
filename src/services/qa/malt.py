@@ -34,12 +34,14 @@ from src.modules.context.literals import MAX_VALUES, ValueIndex, literal_warning
 from src.modules.context.sampling import sample_fields
 from src.modules.decide import Candidate, vote_key
 from src.modules.python_exec import run_python
+from src.modules.questions import Shape, check_premise, coerce, infer_shape, render_shape
+from src.modules.questions.compiler import compile_question
 from src.services.ingest import BusinessContext
 from src.services.qa.graph import build_context
 from src.utils import get_logger
 from src.utils.assets import load_prompt_template
 from src.utils.format import format_result, is_money_question, round_money
-from src.utils.timeparse import LunarCalendar
+from src.utils.timeparse import LunarCalendar, resolve
 
 logger = get_logger(__name__)
 
@@ -211,9 +213,23 @@ class MaltPipeline:
         sql_writer: SQLWriter | None = None,
         literal_check: bool = True,
         type_gates: dict[str, float] | None = None,
+        answer_shape: bool = True,
+        premise_check: bool = True,
+        readme_chars: int = 4000,
+        missing_confidence: float = 0.5,
+        unanswerable_cap: float = 0.5,
+        family_compiler: bool = True,
+        compiler_families: set[str] | None = None,
     ) -> None:
         self.literal_check = literal_check
         self.type_gates = type_gates or {}
+        self.answer_shape = answer_shape
+        self.premise_check = premise_check
+        self.readme_chars = readme_chars
+        self.missing_confidence = missing_confidence
+        self.unanswerable_cap = unanswerable_cap
+        self.family_compiler = family_compiler
+        self.compiler_families = compiler_families
         self.agent = agent
         self.sql_writer = sql_writer
         self.seed = seed
@@ -386,9 +402,79 @@ class MaltPipeline:
             timings[name] = timings.get(name, 0.0) + time.perf_counter() - started
 
         started = time.perf_counter()
-        ctx = build_context(question, as_of, business, self.schema_text, self.lunar)
+        ranges = resolve(question, as_of, self.lunar)
+        ctx = build_context(
+            question,
+            as_of,
+            business,
+            self.schema_text,
+            self.lunar,
+            ranges=ranges,
+            readme_chars=self.readme_chars,
+        )
         ctx["approach"] = approach
+        shape = infer_shape(question) if self.answer_shape else Shape()
+        ctx["shape"] = render_shape(shape)
         timed("schema", started)
+
+        # A period entirely outside the data is unanswerable by rulebook §7; no LLM needed.
+        premise = check_premise(ranges, business.card) if self.premise_check else None
+        if premise is not None:
+            answer = Answer(type="unanswerable")
+            message = {"type": "premise", "text": premise.reason}
+            trace = {
+                "pipeline": "malt",
+                "messages": [
+                    message,
+                    {"type": "final", "answer": answer.model_dump(), "reason": premise.reason},
+                ],
+                "llm_steps": 0,
+                "timings": {"premise": round(time.perf_counter() - started, 4)},
+                "top": answer.model_dump(),
+                "agreement": 1.0,
+                "confidence": 1.0,
+                "premise": premise.reason,
+                "shape": {"type": shape.answer_type, "strong": shape.strong},
+            }
+            return answer, trace
+
+        # A family the wording determines is answered by SQL over the semantic views, without
+        # the model: cheaper, and the rulebook is applied by code rather than by a prompt.
+        if self.family_compiler:
+            has_sales = any(item.startswith("v_sales(") for item in business.semantic)
+            has_orders = any(item.startswith("v_orders(") for item in business.semantic)
+            compiled = compile_question(question, ranges, has_sales, has_orders, as_of)
+            if compiled is not None and (
+                self.compiler_families is None or compiled.family in self.compiler_families
+            ):
+                started = time.perf_counter()
+                try:
+                    frame = source.query(compiled.sql, self.sql_timeout_s, self.max_rows)
+                    value = format_result(compiled.answer_type, frame)
+                    if compiled.answer_type == "number" and is_money_question(question):
+                        value = round_money(value)
+                    answer = Answer(type=compiled.answer_type, value=value)
+                    message = {"type": "compiler", "family": compiled.family}
+                    trace = {
+                        "pipeline": "malt",
+                        "messages": [
+                            message,
+                            {
+                                "type": "final",
+                                "answer": answer.model_dump(),
+                                "reason": compiled.family,
+                            },
+                        ],
+                        "llm_steps": 0,
+                        "timings": {"compiler": round(time.perf_counter() - started, 4)},
+                        "top": answer.model_dump(),
+                        "agreement": 1.0,
+                        "confidence": 1.0,
+                        "compiler": compiled.family,
+                    }
+                    return answer, trace
+                except Exception:  # a failed compiler falls back to the model
+                    logger.exception("family compiler failed for %s", compiled.family)
 
         # THOUGHT 1: reason over the schema
         started = time.perf_counter()
@@ -504,7 +590,13 @@ class MaltPipeline:
                 if answer_type == "unanswerable":
                     answer, reason = Answer(type="unanswerable"), str(reply.get("reason", ""))
                     if not str(reply.get("evidence", "")).strip():
-                        confidence = 0.0  # unanswerable needs the missing column or period
+                        # the evidence guard stays, but a missing evidence line must not turn a
+                        # correct rulebook §7 answer into an abstention: cap it instead
+                        confidence = (
+                            self.unanswerable_cap
+                            if confidence is None
+                            else min(confidence, self.unanswerable_cap)
+                        )
                     break
                 result = resolve_result(results, reply.get("data_result"))
                 problem = None
@@ -514,7 +606,10 @@ class MaltPipeline:
                     problem = f"no usable result named {reply.get('data_result')!r}"
                 else:
                     try:
-                        value = format_result(answer_type, result.frame)
+                        # the wording decides the shape (rulebook §9); a two-column table that the
+                        # question asks as a list is narrowed here, never invented
+                        answer_type, frame = coerce(answer_type, result.frame, shape)
+                        value = format_result(answer_type, frame)
                         if answer_type == "number" and is_money_question(question):
                             value = round_money(value)  # rulebook §9: money is whole VND
                         answer = Answer(type=answer_type, value=value)
@@ -547,9 +642,11 @@ class MaltPipeline:
             break
 
         top = answer if answer.type != "abstain" else None
-        score = 1.0 if confidence is None else confidence
+        score = self.missing_confidence if confidence is None else confidence
         gate = self._gate(top.type, self.min_confidence) if top is not None else 0.0
-        if top is not None and score < gate:
+        # a reply that reports no confidence is not evidence of low confidence: it only fills the
+        # trace's `agreement` (for the PA-vs-tau curve), it does not trigger the gate
+        if top is not None and confidence is not None and score < gate:
             answer, reason = Answer(type="abstain"), f"confidence {score} < {gate}"
         messages.append(
             {"type": "final", "answer": answer.model_dump(), "reason": reason}
@@ -563,5 +660,6 @@ class MaltPipeline:
             "top": top.model_dump() if top is not None else None,
             "agreement": score if top is not None else 0.0,
             "confidence": confidence,
+            "shape": {"type": shape.answer_type, "list_of": shape.list_of, "strong": shape.strong},
         }
         return answer, trace

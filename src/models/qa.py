@@ -68,3 +68,7 @@ class SchemaCard(BaseModel):
     business_id: str
     readme: str = ""
     tables: list[TableCard] = Field(default_factory=list)
+    # first and last dates any transaction-like date column covers (ISO); None when no column
+    # looks like a transaction date. Used by the deterministic unanswerable premise check.
+    data_start: str | None = None
+    data_end: str | None = None

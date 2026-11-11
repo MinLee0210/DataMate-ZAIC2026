@@ -155,8 +155,10 @@ src/
 ├── modules/
 │   ├── ingest/            readers + cleaning: headers, merged cells, VND numbers, split tables,
 │   │                      grouped exports
-│   ├── context/           schema card, entity dict + linking, value sampling
-│   ├── semantic/          rulebook views/macros from assets/semantic/*.sql
+│   ├── context/           schema card, entity dict + linking, value sampling, README excerpt
+│   ├── questions/         answer shape from the wording, premise checks (unanswerable)
+│   ├── semantic/          rulebook macros (assets/semantic/*.sql) + generated v_sales / v_orders /
+│   │                      v_products / v_stock / v_purchases, bound to each shop's columns
 │   ├── agents/            BaseAgent, SQLAgent (system prompt = template + skills + rulebook)
 │   ├── decide/            vote, abstain, unanswerable (vote pipeline)
 │   ├── python_exec.py     sandbox for the agent's pandas analysis
@@ -183,6 +185,8 @@ See `.env.example`. Main variables:
 - LLM: `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_EXTRA_BODY`, `LLM_STREAM`, `FINAL_MODE`
 - pipeline: `PIPELINE` (`malt` = dataAgent, or `vote`), `ANALYZE_EXTRA_BODY` (thinking for the reasoning
   steps), `ANALYZE_MAX_TOKENS`, `WORKERS`
+- dataAgent: `ANSWER_SHAPE`, `PREMISE_CHECK`, `README_CHARS`, `MALT_SAMPLES`, `MALT_MIN_AGREEMENT`,
+  `MALT_TYPE_GATES`, `MALT_MISSING_CONFIDENCE`, `MALT_UNANSWERABLE_CAP`
 - vote pipeline: `K`, `TAU`, `MAX_REPAIRS`, `ANALYZE`
 - paths: `DATA_DIR`, `RESULT_DIR`, `WORK_DIR`, `SPLIT`; budget: `TIME_BUDGET_S`
 - app: `APP_NAME`, `APP_VERSION`, `APP_HOST`, `APP_PORT`, `APP_RELOAD`, `LOG_LEVEL`

@@ -18,14 +18,16 @@ from typing import Annotated, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from src.config import settings
 from src.data.duckdb import DuckDBSource
 from src.modules.agents.sql_agent import PlanParseError, SQLAgent, SQLPlan
-from src.modules.context import link_entities, render_entity_matches
+from src.modules.context import link_entities, readme_excerpt, render_entity_matches
+from src.modules.context.readme import README_CHARS
 from src.modules.decide import UNANSWERABLE, Candidate, Decision, decide
 from src.services.ingest import BusinessContext
 from src.utils import get_logger
 from src.utils.format import format_result
-from src.utils.timeparse import LunarCalendar, render_time_ranges, resolve
+from src.utils.timeparse import LunarCalendar, TimeRange, render_time_ranges, resolve
 
 logger = get_logger(__name__)
 
@@ -65,15 +67,21 @@ def build_context(
     business: BusinessContext,
     schema_text: Callable[[BusinessContext], str],
     lunar: LunarCalendar | None = None,
+    ranges: list[TimeRange] | None = None,
+    readme_chars: int = README_CHARS,
 ) -> dict[str, str]:
     """Prompt sections for one question: README, schema card, semantic views, resolved time,
-    entity links. Deterministic, no LLM; shared by the vote and the MALT pipelines."""
-    ranges = resolve(question, as_of_date, lunar)
+    entity links. Deterministic, no LLM; shared by the vote and the MALT pipelines.
+
+    `ranges` lets a caller that already resolved the time expressions (and checked the premise)
+    avoid doing it twice. The README keeps its conventions section (see context/readme.py)."""
+    if ranges is None:
+        ranges = resolve(question, as_of_date, lunar)
     matches = link_entities(question, business.entities)
     return {
-        "readme": business.card.readme[:3000] or "(no README)",
+        "readme": readme_excerpt(business.card.readme, readme_chars) or "(no README)",
         "schema": schema_text(business),
-        "semantic": ", ".join(business.semantic) or "(none)",
+        "semantic": "\n".join(f"- {item}" for item in business.semantic) or "(none)",
         "time": render_time_ranges(ranges, as_of_date),
         "entities": render_entity_matches(matches),
         "question": question,
@@ -100,7 +108,12 @@ def build_qa_graph(
 
     def prepare(state: QAState) -> dict:
         context = build_context(
-            state["question"], state["as_of_date"], state["business"], schema_text, lunar
+            state["question"],
+            state["as_of_date"],
+            state["business"],
+            schema_text,
+            lunar,
+            readme_chars=settings.readme_chars,
         )
         return {"context": context, "repairs": 0}
 

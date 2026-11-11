@@ -2,7 +2,14 @@ import duckdb
 import pandas as pd
 import pytest
 
-from src.modules.ingest import Table, merge_split_tables, parse_number, read_tables, to_identifier
+from src.modules.ingest import (
+    Table,
+    infer_types,
+    merge_split_tables,
+    parse_number,
+    read_tables,
+    to_identifier,
+)
 from src.modules.ingest.clean import detect_header_row, number_locale
 from src.services.ingest import IngestService
 
@@ -21,6 +28,11 @@ from src.services.ingest import IngestService
         ("1,5tr", 1500000),
         ("2 triệu", 2000000),
         ("30 nghìn", 30000),
+        ("1tr440", 1440000),  # the "1tr440" / "2tr950" shorthand: fraction of a million
+        ("2tr950", 2950000),
+        ("12tr500", 12500000),
+        ("1tr5", 1500000),
+        ("1tr44", 1440000),
         ("12.500", 12.5),  # no currency, ambiguous: read as a decimal
         ("1.234,5 VNĐ", 1234.5),
         ("15%", 0.15),
@@ -178,7 +190,10 @@ def test_semantic_status_and_walk_in_macros():
     from src.modules.semantic import apply_semantic_layer
 
     conn = duckdb.connect()
-    assert {"fold", "is_cancelled", "is_returned", "is_walk_in"} <= set(apply_semantic_layer(conn))
+    described = apply_semantic_layer(conn)
+    assert {"fold", "is_cancelled", "is_returned", "is_walk_in"} <= {
+        item.split("(")[0] for item in described
+    }
 
     def ask(sql, value):
         return conn.execute(sql, [value]).fetchone()[0]
@@ -223,3 +238,91 @@ def test_grouped_export_does_not_fill_order_money_down():
     out = fill_grouped_rows(frame)
     assert out["ma_don"].tolist() == ["D1", "D1", "D1", "D2"]
     assert out["tong_phieu"].isna().tolist() == [False, True, True, False]
+
+
+def test_excel_serial_dates_in_a_date_column_become_dates():
+    # a date column exported as day numbers, the case that stopped every date filter in biz_107
+    frame = pd.DataFrame({"ngay_ban": [45717, 45718, 45719, 45720, 45721]})
+    typed = infer_types(frame)
+    assert pd.api.types.is_datetime64_any_dtype(typed["ngay_ban"])
+    assert [d.strftime("%Y-%m-%d") for d in typed["ngay_ban"]] == [
+        "2025-03-01",
+        "2025-03-02",
+        "2025-03-03",
+        "2025-03-04",
+        "2025-03-05",
+    ]
+
+
+def test_serial_day_numbers_outside_a_date_column_stay_numbers():
+    frame = pd.DataFrame(
+        {"so_ngay": [1, 2, 3, 4, 5], "ngay_sinh": [24000, 24001, 24002, 24003, 24004]}
+    )
+    typed = infer_types(frame)
+    assert typed["so_ngay"].tolist() == [1, 2, 3, 4, 5]
+    assert typed["ngay_sinh"].tolist() == [24000, 24001, 24002, 24003, 24004]
+
+
+def test_the_schema_card_records_the_data_window(toy_split):
+    ctx = IngestService(toy_split / "work").load("shop1", toy_split / "businesses/shop1")
+    assert ctx.card.data_start and ctx.card.data_end
+    assert ctx.card.data_start.startswith("2026-10") and ctx.card.data_end.startswith("2026-10")
+    from src.modules.context import render_schema_card
+
+    assert "data_window" in render_schema_card(ctx.card)
+
+
+def test_the_data_window_ignores_expiry_birth_and_creation_dates():
+    from src.models import ColumnCard, SchemaCard, TableCard
+    from src.modules.context import data_window
+
+    def col(name, lo, hi):
+        return ColumnCard(name=name, original=name, dtype="TIMESTAMP", min=lo, max=hi)
+
+    card = SchemaCard(
+        business_id="b",
+        tables=[
+            TableCard(
+                name="orders",
+                source="x",
+                rows=1,
+                columns=[
+                    col("ngay_dat_hang", "2025-04-01", "2026-07-09"),
+                    col("han_su_dung", "2024-01-01", "2029-01-01"),
+                    col("ngay_sinh", "1965-01-01", "2004-01-01"),
+                    col("thoi_gian_tao", "2023-01-01", "2023-06-01"),
+                ],
+            )
+        ],
+    )
+    # "hang" in ngay_dat_hang is not "han" (expiry); expiry, birth and creation dates are metadata
+    assert data_window(card) == ("2025-04-01", "2026-07-09")
+
+
+def test_serial_dates_in_an_order_date_column():
+    frame = pd.DataFrame({"ngay_dat_hang": [45717, 45718, 45719, 45720, 45721]})
+    typed = infer_types(frame)
+    assert pd.api.types.is_datetime64_any_dtype(typed["ngay_dat_hang"])
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("1 ly", 1),
+        ("2 phần", 2),
+        ("1 m3", 1),
+        ("2", 2),
+        ("1,5 ly", 1.5),
+        ("1/2", None),
+        ("SP01", None),
+    ],
+)
+def test_parse_quantity(text, expected):
+    from src.modules.ingest.clean import parse_quantity
+
+    assert parse_quantity(text) == expected
+
+
+def test_a_quantity_written_with_its_unit_becomes_a_number():
+    frame = pd.DataFrame({"so_luong_san_pham": ["1", "1 ly", "2", "2 ly", "1 phần"]})
+    assert infer_types(frame)["so_luong_san_pham"].tolist() == [1, 1, 2, 2, 1]

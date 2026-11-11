@@ -2,6 +2,148 @@
 
 Newest at the top. Record *why*, not just *what*.
 
+## 2026-11-11 (evening) - Deterministic family compilers, first families
+
+The model's errors are systematic, not random: on dev500, 17 of 21 wrong revenue numbers were
+within 5 % of gold. A family whose wording can be read by pattern is compiled to SQL over the
+semantic views and answered without the LLM (`modules/questions/compiler.py`,
+`scripts/compiler_eval.py`, `scripts/apply_compiler.py`).
+
+Measured on dev500 with the k=1 submission as the fallback (`--base`):
+
+| family | n | precision |
+|---|---|---|
+| best_day | 24 | 100 % |
+| revenue_plain | 72 | 91 % |
+| avg_order | 24 | 90 % |
+| count_cancelled | 17 | 88 % |
+| count_orders | 25 | 72 % |
+| count_orders_threshold | 7 | 71 % |
+| growth_plain | 2 | 50 % |
+
+**PA 0.44 -> 0.476** (318 correct / 80 wrong / 102 abstain); requiring compiler and model to agree
+gives 0.474 with 82 % precision on 364 answers. Still short of the 0.9 target because the compilers
+cover 171 of 500 questions; even fixing every current wrong answer caps PA at 0.796.
+
+Four root causes found while writing them, all fixed:
+- the cash book (`soquy`) was picked as the sales header, so every order status was NULL (biz_109);
+- `tong_don` and `ma_mat_hang` were not roles (biz_127 had no revenue at all);
+- `quý 1/2025` resolved to 2026 Q1;
+- a threshold count parsed the month (`tháng 7`) instead of the amount after "từ".
+
+Not measured: the same compilers on public_test. A VM-side run applies them to the k=1 public
+submission and writes `/workspace/result/public-compiler/submission.jsonl`; the VM notifies
+Telegram itself. The next families to add, in order: revenue by payment/channel/item/group,
+debt (`v_debt`), top-k, count of quantities.
+
+## 2026-11-11 - Semantic layer: the rulebook as views, bound to each shop's columns
+
+PA not measured: no GPU run yet. What was measured is how the generated views behave on train
+gold, which is a correctness bound, not a PA claim.
+
+- **Why.** On dev1000, debt scored -0.44, customer 0.29, average order 0.16, and 36 of 56 wrong
+  revenue numbers were within 5 % of gold. The rulebook defines those terms precisely; a 9B model
+  re-deriving them from a prompt every question is the wrong place for that knowledge. Two cases
+  were verified by hand before writing code: biz_108 revenue 3/2025 is the sum of the line totals
+  of valid orders (order-level discount is *not* subtracted; 246,242,900 exactly), and biz_119's
+  top-5 customers is grouped by **customer code**, not name (gold order reproduced exactly).
+- **`roles.py`** guesses the role of every column (order code, order date, status, customer
+  code/name, item code/name, quantity, base quantity, unit, factor, line total, unit price,
+  discount, paid, debt, payment method, channel, staff, supplier, purchase date/total, stock,
+  cost, category) from its folded name and type, with word-bounded exclusions and a table of
+  concatenated spellings (`mahoadon`, `tongtienhang`, `ngaylap`). It classifies each table
+  (sales, products, stock, purchases) by score. Two extraction bugs found on the way: `fold()`
+  removes `_`, so every snake_case pattern missed (fixed with `keep="_"`), and exclusions like
+  `han` matched `thang`/`hang`, so `ngay_thang` and `ngay_dat_hang` were rejected as dates.
+- **`bind.py`** writes `v_sales` (line or order grain; `is_valid`, `is_walk_in`, `line_total`,
+  `base_quantity`), `v_orders` (one row per code, `BOOL_AND(is_valid)`, sum of line totals),
+  `v_products`, `v_stock`, `v_purchases`. A detail table is joined to its header deduplicated by
+  order code, so an order repeated on every line cannot fan out. Rulebook §1's "a partly returned
+  order is dropped whole" is implemented as a per-order `BOOL_OR(quantity < 0)` window, because
+  many shops write returns as a negative line and never set the status to "trả hàng".
+  A view that cannot be built is skipped; the generic path still works. Nothing is keyed on a
+  business id.
+- **Measured on train gold (strict filter: shop-wide monthly revenue only): 13/13 exact.** The
+  three checks that matter most:
+  biz_108 3/2025 246,242,900 = gold; biz_119 top-5 by code = gold order; and a partly returned
+  order (one negative line) drops the whole order, as §1 says.
+- **Coverage** (fresh ingest, INGEST_VERSION 13): v_sales **30/30** train shops and **14/14**
+  public shops; v_orders 26/30 and 10/14; v_products 22/30 and 10/14; v_stock 10/30 and 3/14;
+  v_purchases 11/30 and 6/14. Public shops are the important number: the semantic layer transfers
+  to the new sectors (baby goods, repair, phone) because it binds by column role, not by shop.
+  dev_013 (baby goods, grouped two-row header) needed the abbreviations `ĐG`/`TT`/`SL`/`HĐ` and
+  now has v_sales and v_orders.
+- **Ingest fix that unlocked a shop:** biz_117 writes money as `1tr440` (1.44 million), 15 % of
+  its rows, so every money column stayed VARCHAR and no view could use it. `parse_number` now
+  reads `NtrFFF` as the fraction of a million; the whole shop gets numeric money, not just the
+  semantic layer.
+- **Prompt.** Every view is listed with its columns under "Semantic views available"; the
+  data-query prompt says to prefer `v_*` because they already apply §1 and §3; the
+  `business-metrics` skill documents each view and the traps (`order_paid` only on a header, use
+  `v_orders` for order counts, `factor` only when `base_quantity` is null).
+- **Limits, on purpose.** No debt view yet (payments live in different shapes per shop); quantity
+  written with a unit ("1 bình") is not parsed; `v_stock` is the stock figure the shop records,
+  not an as-of recomputation; shops with no order code get `v_sales` but no `v_orders`; header-only
+  shops have no item/quantity. These fall back to the previous prompt path.
+- **Tests:** `tests/test_semantic.py` (roles, revenue, walk-in, order grain, negative-line return,
+  products/stock, flat shop), plus `1tr440` cases in `test_ingest.py`. 342 pass, ruff clean.
+
+Still unmeasured: the PA effect. It needs `make eval SUBSET=dev1000` on the target model, and
+`ANSWER_SHAPE`/`PREMISE_CHECK` from the entry below should be measured in the same run.
+
+## 2026-11-10 (later) - Shape from the wording, data window, serial dates, honest confidence
+
+Nothing here is scored on PA yet: the GPU is not running. What was measured is how often the new
+and deterministic parts are right on train, which is a hard bound, not a PA claim.
+
+- **Answer shape from the wording** (`modules/questions/shape.py`, `ANSWER_SHAPE`). The model used
+  to pick `answer_type` freely. On dev1000, 24 of the 63 list questions came back as a two-column
+  table, and the payload was right: only the shape was wrong (a wrong type scores −1). The wording
+  carries the shape ("liệt kê", "top 5", "kèm số nợ của từng người", "có tăng liên tục không",
+  "ngày nào"). The router reads it with regex on the folded text and the shape goes into the query
+  and results prompts. `coerce` narrows only where the rulebook leaves no choice: a table asked as
+  a list keeps the name column or the single measure, two measure columns are flattened in row
+  order. On all 3,000 train questions: **97.1 % precision on 93.5 % coverage**; of the 24 real
+  table→list failures it catches **24/24**, and it calls **0** of the 19 gold tables a list, so a
+  correct table answer is not narrowed. Cues that were wrong in the first pass and are now fixed:
+  `%` in a product name ("Otrivin 0,1%"), "mọi loại" vs "mỗi loại" (both fold to `moi`), "ít nhất
+  4 đơn" as a filter, "kém" as a superlative (folds to `kem`, the same as "kèm"), and `2026 mặt
+  hàng` read as "2026 items" instead of a year.
+- **Data window + premise check** (`card.data_start/data_end`, `modules/questions/premise.py`,
+  `PREMISE_CHECK`). Ingest records the first and last transaction date of the shop (birth dates,
+  expiry dates and record-creation timestamps excluded). When every period in the question lies
+  outside that window, the answer is `unanswerable` with no LLM call (rulebook §7). Only no-overlap
+  is flagged; a partly overlapping period still goes through the agent (§7 computes the part that
+  exists). Checked with the real windows on all 3,000 train questions: it flags **14 of the 70 gold
+  unanswerables** and **0 of the other 2,930** questions, in 0 LLM calls.
+- **Excel serial dates** (`clean.serial_dates`, `INGEST_VERSION` 10). A date column exported as day
+  numbers (`45717`) was converted to BIGINT before the date path, so every date filter failed.
+  Seen in biz_107 (43,079 rows, 40 questions): on dev1000 it scored −0.29 (3 right / 8 wrong / 6
+  abstain). Now a column named like a date whose values all lie in 20000..80000 becomes a
+  timestamp; `so_ngay` and `ngay_sinh` are left alone. Bumped the ingest version, so every cache
+  rebuilds.
+- **README keeps its conventions** (`context/readme.py`, `README_CHARS`). The prompt cut the README
+  at 3,000 characters, which lost `## Quy ước` in 6 of 30 train shops and 5 of 14 public shops
+  (biz_119 at 3,100 chars, biz_120 at 3,169, dev_008 at 4,133, dev_013 at 3,669). The excerpt now
+  keeps the head and always appends the conventions section.
+- **Confidence and evidence** (`MALT_MISSING_CONFIDENCE`, `MALT_UNANSWERABLE_CAP`). A final reply
+  with no `confidence` counted as 1.0, i.e. certain; it is now 0.5 for the trace and, more
+  importantly, **does not trigger the confidence gate** (absent is not low). An `unanswerable`
+  reply without `evidence` used to be forced to 0.0, so any positive `MIN_CONFIDENCE` turned a
+  correct rulebook §7 answer into an abstention; it is capped at 0.5 instead. Both change what the
+  gate does, so recalibrate with `scripts/calibrate.py` before trusting any tau.
+- **Pipeline names fail loudly** (`config.PIPELINE_ALIASES`). `PIPELINE=ca` used to fall through to
+  the vote pipeline with no message (the pod ran k=1 that way for a while). `ca`/`dataagent` map to
+  `malt`, `graph` to `vote`, an unknown name raises, and retired `CA_*` env names warn.
+- **Tests**: `tests/test_shape.py`, `test_premise.py`, `test_readme.py`, `test_config.py`, two
+  serial-date cases and a data-window case in `test_ingest.py`; the evidence/cap test in
+  `test_malt.py` was rewritten. 331 pass, `ruff` clean. No network, no GPU.
+
+Not done here: the semantic layer (still 4 macros). It is the largest remaining lever and needs a
+column-role pass at ingest, so it should be one change on its own. Until a `dev1000` run exists,
+treat `ANSWER_SHAPE`, `PREMISE_CHECK` and the new confidence values as untested switches; set
+`ANSWER_SHAPE=0` / `PREMISE_CHECK=0` to fall back to the previous behaviour.
+
 ## 2026-11-10 - Trial changes: shipped config = measured config, type gates, intent diagnostic
 
 Nothing here was run on a GPU or scored. These are switches to try; PA effects are unmeasured.

@@ -7,7 +7,7 @@ import duckdb
 
 from src.config import settings
 from src.models import SchemaCard
-from src.modules.context import Entity, build_entity_dict, build_table_card
+from src.modules.context import Entity, build_entity_dict, build_table_card, data_window
 from src.modules.ingest import TABLE_SUFFIXES, merge_split_tables, read_tables
 from src.modules.semantic import apply_semantic_layer
 from src.utils import get_logger
@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 CALENDAR_TABLE = "lunar_calendar"
 # part of the cache key: bump it when ingest output changes, so old caches are rebuilt
-INGEST_VERSION = "8"
+INGEST_VERSION = "15"
 
 
 @dataclass
@@ -88,7 +88,8 @@ class IngestService:
                 card.tables.append(
                     build_table_card(conn, table.name, table.source, table.originals)
                 )
-            semantic = apply_semantic_layer(conn)
+            card.data_start, card.data_end = data_window(card)
+            semantic = apply_semantic_layer(conn, card)
             entities = build_entity_dict(conn, card)
         finally:
             conn.close()

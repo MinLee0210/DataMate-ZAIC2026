@@ -73,6 +73,17 @@ class QAService:
                 variant_offset=settings.malt_variant_offset,
                 literal_check=settings.malt_literal_check,
                 type_gates=settings.type_gates,
+                answer_shape=settings.answer_shape,
+                premise_check=settings.premise_check,
+                readme_chars=settings.readme_chars,
+                missing_confidence=settings.malt_missing_confidence,
+                unanswerable_cap=settings.malt_unanswerable_cap,
+                family_compiler=settings.family_compiler,
+                compiler_families=(
+                    {name.strip() for name in settings.compiler_families.split(",") if name.strip()}
+                    if settings.compiler_families
+                    else None
+                ),
                 sql_writer=(
                     SQLWriter(LLM(settings.sql_llm_model, settings.sql_llm_base_url))
                     if settings.sql_llm_base_url

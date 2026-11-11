@@ -19,6 +19,25 @@ hàng khi có. Dưới đây là cách tính chúng trên các bảng bạn nh�
   không bao giờ là một khách hàng trong phép đếm hay xếp hạng.
 - `fold(x)`: chữ thường, bỏ dấu, `đ` → `d`; dùng để so sánh tên và nhãn.
 
+## View đã sinh sẵn (dùng khi prompt có liệt kê)
+Ingest dựng các view này từ chính cột của shop; mục "Semantic views available" trong prompt cho
+biết view nào có và đúng tên cột. Ưu tiên dùng chúng thay vì suy lại rulebook:
+- `v_sales` — mỗi dòng hàng một dòng (hoặc mỗi đơn khi shop không có bảng chi tiết). `is_valid`
+  đã loại đơn huỷ và đơn có dòng trả hàng; `is_walk_in` đánh dấu dòng không phải khách;
+  `sale_date` là ngày **đặt**; `line_total` là tiền dòng sau giảm giá dòng, không trừ giảm giá
+  cấp đơn, không VAT, không phí giao; `base_quantity` đã quy về đơn vị cơ bản khi shop có ghi.
+  `order_paid` chỉ có khi bảng là đầu đơn: không cộng nó trên các dòng.
+- `v_orders` — mỗi đơn một dòng: `order_date`, `is_valid`, `is_walk_in`, `customer_code`,
+  `customer_name`, `order_total` (tổng tiền dòng của đơn). Đếm đơn và tính trung bình một đơn ở
+  đây, không ở `v_sales`.
+- `v_products` — mã/tên hàng, `base_unit`, `big_unit`, hệ số `factor`, `cost_price`, `category`.
+  Chỉ nhân số lượng với `factor` khi `base_quantity` trống.
+- `v_stock` — số tồn shop ghi, theo mặt hàng.
+- `v_purchases` — phiếu nhập theo `purchase_date`, kèm nhà cung cấp và số tiền.
+View không có nghĩa là cột của shop không đủ: quay lại dùng các bảng.
+`v_sales` có mọi dòng shop ghi, kể cả dòng không phải mặt hàng (phí phục vụ, voucher, điểm, phí
+ship). Giữ hay bỏ các dòng đó theo `item_name` đúng như rulebook nói.
+
 ## Đơn hợp lệ
 - Hợp lệ = `NOT is_cancelled(status) AND NOT is_returned(status)`. Mọi trạng thái khác (xong,
   `Thành công`, đang giao) đều hợp lệ.

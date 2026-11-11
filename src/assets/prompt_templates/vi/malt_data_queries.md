@@ -5,6 +5,11 @@ Bước thứ hai: lập các truy vấn dữ liệu, sau khi đã suy luận tr
 {{schema}}
 ```
 
+## View ngữ nghĩa (đã áp rulebook §1 và §3)
+{{semantic}}
+Ưu tiên view `v_*` khi nó trả lời được câu hỏi: view đã loại đơn huỷ/trả, dùng ngày đặt và coi
+khách là mã. Không suy lại các luật đó.
+
 ## Thời gian đã được xác định
 {{time}}
 
@@ -28,6 +33,11 @@ Các truy vấn đã được kiểm chứng cho câu hỏi tương tự ở c�
 phải của cửa hàng này: hãy tái sử dụng cách làm (bộ lọc, quy tắc rulebook, nhóm, làm tròn), tuyệt đối
 không dùng lại tên bảng hay cột.
 {{examples}}
+
+## Hình dạng đáp án (rulebook §9)
+{{shape}}
+Hình dạng này là đáp án khi dữ liệu trả lời được; nó không làm câu không trả lời được thành trả
+lời được.
 
 Viết từ 1 đến 3 truy vấn dữ liệu có tên. Mỗi truy vấn là một câu `SELECT` DuckDB chỉ-đọc (được dùng
 CTE) trên các bảng ở trên. Khi có thể, hãy để một truy vấn trả về đúng đáp án: đã tính, đã làm tròn và

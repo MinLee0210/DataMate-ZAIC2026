@@ -53,6 +53,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ids", type=Path, help="file with one question id per line (subset)")
     parser.add_argument("--resume", action="store_true", help="skip ids already in the output")
     parser.add_argument("--workers", type=int, default=settings.workers, help="question threads")
+    parser.add_argument(
+        "--order",
+        choices=("file", "business"),
+        default="file",
+        help="question order; 'business' keeps one shop's prompt prefix in the vLLM cache",
+    )
     args = parser.parse_args(argv)
 
     started = time.monotonic()
@@ -71,6 +77,10 @@ def main(argv: list[str] | None = None) -> int:
     elif submission.is_file():
         submission.unlink()
     todo = [q for q in questions if q.id not in done]
+    if args.order == "business":
+        # the schema, README and skills of one shop are a long shared prefix; grouping questions
+        # by shop raises the vLLM prefix-cache hit rate (the submission order does not matter)
+        todo.sort(key=lambda q: (q.business_id, q.id))
 
     calendar, rulebook = calendar_file(root), rulebook_file(root)
     if rulebook is None:

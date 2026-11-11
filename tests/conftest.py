@@ -50,6 +50,12 @@ def plan(answer_type, sql):
 
 
 @pytest.fixture(autouse=True)
+def no_family_compiler(monkeypatch):
+    """Existing tests script the LLM; the deterministic family compilers would answer first."""
+    monkeypatch.setattr(settings, "family_compiler", False)
+
+
+@pytest.fixture(autouse=True)
 def no_analysis_step(monkeypatch):
     """Scripted replies in most tests are SQL plans only; tests of the analysis step turn it on."""
     monkeypatch.setattr(settings, "analyze", False)

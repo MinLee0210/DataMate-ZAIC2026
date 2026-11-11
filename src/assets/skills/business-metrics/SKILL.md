@@ -19,6 +19,26 @@ there is one. These are the ways to compute them on the tables you get.
   orders are never a customer in counts or rankings.
 - `fold(x)`: lowercase, no accents, `đ` → `d`; compare names and labels with it.
 
+## Generated views (use them when the prompt lists them)
+Ingest builds these from the shop's own columns, and the prompt's "Semantic views available"
+shows which exist and their exact columns. Prefer them to re-deriving the rulebook:
+- `v_sales` — one row per order line (or per order when the shop has no line table).
+  `is_valid` already excludes cancelled orders and orders with any returned line; `is_walk_in`
+  marks rows that are not a customer; `sale_date` is the **order** date; `line_total` is the line
+  after its line discount, without order-level discount, VAT or shipping; `base_quantity` is in
+  base units when the shop records the conversion. `order_paid` is filled only when the fact is
+  the order header: never sum it over lines.
+- `v_orders` — one row per order: `order_date`, `is_valid`, `is_walk_in`, `customer_code`,
+  `customer_name`, `order_total` (sum of the order's line totals). Count orders and average
+  order value here, not in `v_sales`.
+- `v_products` — item code and name, `base_unit`, `big_unit`, conversion `factor`, `cost_price`,
+  `category`. Multiply a line's quantity by `factor` only when `base_quantity` is null.
+- `v_stock` — the stock figure the shop records, per item.
+- `v_purchases` — purchase slips by `purchase_date`, with supplier and amount.
+A view that is absent means the shop's columns did not allow it: fall back to the tables.
+`v_sales` holds every line the shop records, including non-product rows (service fee, voucher,
+points, shipping). Keep or drop those rows by `item_name` exactly as the rulebook says.
+
 ## Valid orders
 - Valid = `NOT is_cancelled(status) AND NOT is_returned(status)`. Everything else (done, `xong`,
   `Thành công`, delivering) is valid.

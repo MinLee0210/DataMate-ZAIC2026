@@ -6,6 +6,11 @@ values.
 {{schema}}
 ```
 
+## Semantic views (already apply rulebook §1 and §3)
+{{semantic}}
+Prefer a `v_*` view when it answers the question: it already excludes cancelled and returned
+orders, uses the order date and treats a customer as a code. Do not re-derive those rules.
+
 ## Resolved time
 {{time}}
 
@@ -28,6 +33,11 @@ values.
 Verified queries for similar questions on other businesses. Their tables and columns are not this
 shop's: reuse the approach (filters, rulebook rule, grouping, rounding), never the names.
 {{examples}}
+
+## Answer shape (rulebook §9)
+{{shape}}
+The shape describes the answer if the data can answer the question; it does not make an
+unanswerable question answerable.
 
 Write 1 to 3 named data queries. Each is one read-only DuckDB `SELECT` (CTEs are fine) over the
 tables above. Make one query return exactly the answer when you can: computed, rounded and

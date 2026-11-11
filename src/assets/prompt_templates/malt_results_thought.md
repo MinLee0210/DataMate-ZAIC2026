@@ -18,6 +18,11 @@ a point and no answer costs nothing: give a final answer only when you believe i
 ## Data queries and results
 {{data}}
 
+## Answer shape the wording asks for (rulebook §9)
+{{shape}}
+The shape does not make an unanswerable question answerable: if the data truly lacks the answer,
+say so (with evidence) instead of forcing a value into the shape.
+
 Check these one by one, and abstain when one fails and you cannot fix it:
 - Unit and scale: the unit the question asks for (hộp vs viên, VND), percent in points (66.01 not
   0.66), a count vs an amount.

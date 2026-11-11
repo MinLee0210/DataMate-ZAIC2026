@@ -1,3 +1,6 @@
+import re
+from datetime import date
+
 import duckdb
 import yaml
 
@@ -5,6 +8,40 @@ from src.models import ColumnCard, SchemaCard, TableCard
 
 TOP_K = 8
 MAX_VALUE_CHARS = 60
+# a transaction date column; birth dates, expiry dates and record-creation timestamps are not
+# the shop's data window (a product created in 2023 does not mean the shop sold anything then)
+_DATE_NAME = re.compile(r"ngay|thoi_gian|date|time")
+# word-bounded: "han" (expiry) must not match "hang" in "ngay_dat_hang" (order date)
+_NOT_WINDOW = re.compile(r"(^|_)(sinh|han|expiry|birth|tao|created|create)($|_)")
+
+
+def data_window(card: SchemaCard) -> tuple[str | None, str | None]:
+    """First and last date over the transaction-like date columns, ISO, or (None, None).
+
+    A shop's birth-date column holds 1965 and its expiry-date column 2027; neither says when the
+    shop has sales. The window is the widest range of a date column whose values reach 2020.
+    """
+    low: date | None = None
+    high: date | None = None
+    for table in card.tables:
+        for column in table.columns:
+            if not (column.min and column.max):
+                continue
+            if not _DATE_NAME.search(column.name) or _NOT_WINDOW.search(column.name):
+                continue
+            try:
+                start = date.fromisoformat(column.min[:10])
+                end = date.fromisoformat(column.max[:10])
+            except ValueError:
+                continue
+            if end.year < 2020:
+                continue
+            low = start if low is None or start < low else low
+            high = end if high is None or end > high else high
+    return (
+        low.isoformat() if low else None,
+        high.isoformat() if high else None,
+    )
 
 
 def _quote(name: str) -> str:
@@ -68,4 +105,7 @@ def render_schema_card(card: SchemaCard) -> str:
         tables.append(
             {"table": table.name, "source": table.source, "rows": table.rows, "fields": fields}
         )
-    return yaml.safe_dump({"tables": tables}, allow_unicode=True, sort_keys=False, width=1000)
+    payload: dict = {"tables": tables}
+    if card.data_start and card.data_end:
+        payload["data_window"] = {"first_date": card.data_start, "last_date": card.data_end}
+    return yaml.safe_dump(payload, allow_unicode=True, sort_keys=False, width=1000)

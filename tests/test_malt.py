@@ -207,15 +207,20 @@ def test_confidence_above_the_gate_answers(toy_split, tmp_path, monkeypatch):
     assert answer.type == "number" and trace["agreement"] == 0.85
 
 
-def test_unanswerable_without_evidence_gets_zero_confidence(toy_split, tmp_path, monkeypatch):
+def test_unanswerable_without_evidence_is_capped_not_dropped(toy_split, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "pipeline", "malt")
-    monkeypatch.setattr(settings, "min_confidence", 0.5)
     final = {"thought": "?", "action": "final", "answer_type": "unanswerable", "reason": "no data",
              "confidence": 0.9}  # fmt: skip
+    # the evidence guard stays: 0.9 is capped at 0.5, so a 0.6 gate still abstains
+    monkeypatch.setattr(settings, "min_confidence", 0.6)
     answer, trace = service_for(toy_split, tmp_path, FakeLLM(malt_replies(final))).answer(
         question()
     )
-    assert answer.type == "abstain" and trace["agreement"] == 0.0
+    assert answer.type == "abstain" and trace["agreement"] == 0.5
+    # ... but a rulebook §7 answer is no longer thrown away by a small gate
+    monkeypatch.setattr(settings, "min_confidence", 0.5)
+    answer, _ = service_for(toy_split, tmp_path, FakeLLM(malt_replies(final))).answer(question())
+    assert answer.type == "unanswerable"
     final["evidence"] = "no column records the delivery date"
     answer, _ = service_for(toy_split, tmp_path, FakeLLM(malt_replies(final))).answer(question())
     assert answer.type == "unanswerable"
@@ -468,3 +473,61 @@ def test_replica_urls_and_final_mode(monkeypatch):
     with pytest.raises(ValueError, match="local"):
         Settings(final_mode=True, llm_base_urls="http://127.0.0.1:8011/v1,http://example.com/v1")
     assert Settings(malt_type_gates='{"list": 1}').type_gates == {"list": 1.0}
+
+
+def test_a_period_outside_the_data_is_unanswerable_without_a_model_call(
+    toy_split, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(settings, "pipeline", "malt")
+    monkeypatch.setattr(settings, "premise_check", True)
+
+    def reply(prompt):
+        raise AssertionError("the model must not be called")
+
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(
+        question("doanh thu tháng 12/2024")
+    )
+    assert answer.type == "unanswerable" and trace["llm_steps"] == 0
+    assert "outside the data" in trace["premise"]
+
+
+def test_a_table_answer_is_narrowed_to_the_list_the_wording_asks_for(
+    toy_split, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(settings, "pipeline", "malt")
+    sql = "SELECT ma_sp, sum(thanh_tien_vnd) AS tien FROM orders GROUP BY 1 ORDER BY 2 DESC"
+
+    def reply(prompt):
+        if "first step: reason over the schema" in prompt:
+            return json.dumps({"thought": "items", "sample_fields": []})
+        if "plan the data queries" in prompt:
+            return json.dumps(
+                {
+                    "thought": "one query",
+                    "data_queries": [{"name": "rev", "question": "items", "sql": sql}],
+                }
+            )
+        return json.dumps(
+            {"thought": "ok", "action": "final", "answer_type": "table", "data_result": "rev"}
+        )
+
+    llm = FakeLLM(reply)
+    answer, trace = service_for(toy_split, tmp_path, llm).answer(
+        question("liệt kê 3 mặt hàng bán chạy nhất tuần rồi")
+    )
+    assert answer.type == "list" and isinstance(answer.value, list)
+    assert trace["shape"]["type"] == "list"
+    assert "Expected answer type: `list`" in llm.calls[1][0]
+
+
+def test_the_family_compiler_answers_without_the_model(toy_split, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "pipeline", "malt")
+    monkeypatch.setattr(settings, "family_compiler", True)
+    monkeypatch.setattr(settings, "compiler_families", "revenue_plain")
+
+    def reply(prompt):
+        raise AssertionError("the compiler must answer without the model")
+
+    answer, trace = service_for(toy_split, tmp_path, FakeLLM(reply)).answer(question())
+    assert answer.type == "number" and answer.value == 2150000
+    assert trace["llm_steps"] == 0 and trace["compiler"] == "revenue_plain"

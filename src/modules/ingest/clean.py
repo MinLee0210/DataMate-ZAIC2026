@@ -17,6 +17,8 @@ _VND = re.compile(r"(vnđ|vnd|đồng|đ)", re.IGNORECASE)
 _DOT_THOUSANDS = re.compile(r"^-?\d{1,3}(\.\d{3})+$")  # 50.000: thousands when the value is VND
 # shorthand money: 25k, 1.5tr, 2 triệu, 30 nghìn
 _SCALE = re.compile(r"^(-?\d+(?:[.,]\d+)?)(k|nghìn|ngàn|nghin|ngan|tr|triệu|trieu)$", re.IGNORECASE)
+# "1tr440" / "2tr950" / "1tr5": the digits after `tr` are the fraction of a million
+_TR_FRACTION = re.compile(r"^(-?\d+)tr(\d{1,3})$", re.IGNORECASE)
 _SCALES = {"k": 1e3, "nghìn": 1e3, "ngàn": 1e3, "nghin": 1e3, "ngan": 1e3}
 _DATE_LIKE = re.compile(r"^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}( \d{1,2}:\d{2}(:\d{2})?)?$")
 _ISO_DATE = re.compile(r"^\d{4}-\d{1,2}-\d{1,2}")
@@ -179,6 +181,10 @@ def parse_number(value: object, locale: str | None = None) -> float | None:
     text = _CURRENCY.sub("", raw).strip().replace(" ", "").replace(" ", "")
     percent = text.endswith("%")
     text = text.rstrip("%")
+    fraction = _TR_FRACTION.match(text)
+    if fraction:
+        whole, part = fraction.groups()
+        return float(whole) * 1e6 + int(part) / 10 ** len(part) * 1e6
     scaled = _SCALE.match(text)
     if scaled:
         unit = scaled.group(2).lower()
@@ -219,6 +225,14 @@ _VN_DATE = re.compile(
     re.IGNORECASE,
 )
 _SERIAL = re.compile(r"^\d{5}(\.0+)?$")  # Excel day number, 1954..2119 for 20000..80000
+_SERIAL_MIN, _SERIAL_MAX = 20000, 80000
+# a column whose name says "date" and whose whole values are Excel day numbers
+_DATE_NAME = re.compile(r"ngay|date|thoi_gian")
+# word-bounded: "hang" in "ngay_dat_hang" is not "han" (an expiry date)
+_NOT_WINDOW_NAME = re.compile(r"(^|_)(sinh|han|expiry|birth|tao|created|create)($|_)")
+# a quantity written with its unit in the same cell ("1 ly", "2 phần"): the number is the quantity
+_QUANTITY_NAME = re.compile(r"(^|_)(so_luong|soluong|sl|qty|quantity|sl_ban|sl_nhap)($|_)")
+_LEADING_NUMBER = re.compile(r"^(-?\d+(?:\.\d+)?)(?:\s+\D.*)?$")
 _NO_YEAR = re.compile(r"^(\d{1,2})[/.-](\d{1,2})$")
 _EXCEL_EPOCH = date(1899, 12, 30)
 
@@ -233,7 +247,7 @@ def normalize_date_text(value: object) -> str:
         return f"{day}/{month}/{year}" if year else f"{day}/{month}"
     if _SERIAL.match(text):
         n = int(float(text))
-        if 20000 <= n <= 80000:
+        if _SERIAL_MIN <= n <= _SERIAL_MAX:
             return (_EXCEL_EPOCH + timedelta(days=n)).isoformat()
     return text
 
@@ -286,11 +300,60 @@ def drop_repeated_headers(frame: pd.DataFrame, originals: list[str]) -> pd.DataF
     return frame[~repeated].reset_index(drop=True) if repeated.any() else frame
 
 
-def infer_column(series: pd.Series) -> pd.Series:
-    """Convert a text column to numbers or dates when nearly all of its values parse."""
+def parse_quantity(value: object) -> float | None:
+    """The number at the start of a quantity cell: "1 ly" -> 1, "2" -> 2, "1/2" -> None.
+
+    Some exports repeat the unit inside the quantity cell ("1 ly", "2 phần") while the unit also
+    has its own column. The number is the quantity; keeping the whole cell as text makes the
+    column unusable for every quantity question.
+    """
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    text = str(value).strip().replace(",", ".")
+    match = _LEADING_NUMBER.match(text)
+    return float(match.group(1)) if match else None
+
+
+def serial_dates(series: pd.Series, name: str) -> pd.Series | None:
+    """Excel day numbers read as dates, or None.
+
+    A date column exported from Excel sometimes holds the day number as a plain integer
+    (`45717`), not as a date cell. The number-first type inference would turn it into BIGINT and
+    every date filter would then fail. Converted only when the column name says date and every
+    value is a plausible day number (20000..80000 = 1954..2119).
+    """
+    if not name or not _DATE_NAME.search(name) or _NOT_WINDOW_NAME.search(name):
+        return None
+    values = series.dropna()
+    if len(values) < 5:
+        return None
+    numbers = pd.to_numeric(values, errors="coerce")
+    if numbers.isna().any() or not numbers.between(_SERIAL_MIN, _SERIAL_MAX).all():
+        return None
+    parsed = pd.to_datetime(numbers.astype("int64"), unit="D", origin="1899-12-30")
+    out = pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+    out.loc[values.index] = parsed.to_numpy()
+    return out
+
+
+def infer_column(series: pd.Series, name: str = "") -> pd.Series:
+    """Convert a column to numbers or dates when nearly all of its values parse."""
     non_null = series.dropna()
-    if non_null.empty or not (series.dtype == object or pd.api.types.is_string_dtype(series)):
+    if non_null.empty:
         return series
+    serial = serial_dates(series, name)
+    if serial is not None:
+        return serial
+    if not (series.dtype == object or pd.api.types.is_string_dtype(series)):
+        return series
+    if _QUANTITY_NAME.search(str(name).lower()):
+        quantities = non_null.map(parse_quantity)
+        if quantities.notna().mean() >= PARSE_THRESHOLD:
+            return series.map(parse_quantity).astype("float64")
     locale = number_locale(non_null)
     numbers = non_null.map(lambda v: parse_number(v, locale))
     if numbers.notna().mean() >= PARSE_THRESHOLD:
@@ -308,7 +371,7 @@ def infer_column(series: pd.Series) -> pd.Series:
 def infer_types(frame: pd.DataFrame) -> pd.DataFrame:
     out = frame.copy()
     for col in out.columns:
-        out[col] = infer_column(out[col])
+        out[col] = infer_column(out[col], str(col))
         if out[col].dtype == "float64" and (out[col].dropna() % 1 == 0).all():
             out[col] = out[col].astype("Int64")
     return out

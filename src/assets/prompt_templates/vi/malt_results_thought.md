@@ -18,6 +18,11 @@ trừ một điểm còn không trả lời thì không mất gì: chỉ đưa �
 ## Truy vấn dữ liệu và kết quả
 {{data}}
 
+## Hình dạng đáp án mà câu hỏi yêu cầu (rulebook §9)
+{{shape}}
+Hình dạng này không làm câu không trả lời được thành trả lời được: nếu dữ liệu thật sự không có
+đáp án, hãy nói không trả lời được (kèm bằng chứng) thay vì ép một giá trị vào hình dạng.
+
 Kiểm tra lần lượt các điểm sau, và hãy từ chối trả lời (abstain) khi một điểm không đạt mà bạn không
 sửa được:
 - Đơn vị và quy mô: đúng đơn vị câu hỏi hỏi (hộp hay viên, VND), phần trăm tính theo điểm phần

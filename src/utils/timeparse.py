@@ -194,6 +194,7 @@ def _rules(today: date, lunar: LunarCalendar | None) -> list[tuple[str, RuleValu
         (r"\bngay (\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?\b", explicit_day),
         (r"\bthang (\d{1,2})(?:[/-]| nam )(\d{4})\b", lambda mm, yy: latest_month(mm, yy)),
         (r"\bthang (\d{1,2})\b", lambda mm: latest_month(mm, None)),
+        (r"\bquy (\d)\s*[/ ]\s*(?:nam )?(\d{4})\b", quarter),
         (r"\bquy (\d)(?: nam (\d{4}))?\b", quarter),
         (r"\bnam (\d{4})\b", lambda yy: (date(yy, 1, 1), date(yy, 12, 31), "year")),
         (r"\bhom kia\b", (today - timedelta(days=2), today - timedelta(days=2), "day")),
